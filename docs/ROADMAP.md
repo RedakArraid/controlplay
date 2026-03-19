@@ -12,9 +12,9 @@
 - [x] Simulation de paiement avec redirection interne.
 - [x] Tâches Celery pour activer et désactiver une session (en mode Broadlink dry-run).
 
-### Phase 2 — Finaliser le MVP fonctionnel
+### Phase 2 — Finaliser le MVP fonctionnel (en cours)
 
-- [ ] Ajouter des scripts de démarrage et de migration (commande unique pour init DB).
+- [x] Ajouter des scripts de démarrage et de migration (commande unique pour init DB).
 - [ ] Affiner l’UI HTML (client + admin) pour une meilleure expérience en salle de jeux.
 - [ ] Tester le flux complet en local (sans Docker si nécessaire):
   - [ ] Création d’une offre via `/admin/offers`.
@@ -23,13 +23,21 @@
 - [ ] Consolider les statuts de session (cas d’erreur paiement, annulation, etc.).
 - [ ] Ajouter un minimum de logs lisibles (plutôt que uniquement `EventLog` brute).
 
+#### Livrables récents (mars 2026)
+
+- [x] Ajout de `.env.example` pour faciliter l'initialisation locale.
+- [x] Ajout d'un `Makefile` (`init-env`, `up`, `down`, `migrate`, `bootstrap`, `revision`).
+- [x] Intégration d'Alembic avec migration initiale (`0001_initial_schema`).
+- [x] Passage de `AUTO_CREATE_SCHEMA=false` par défaut (migrations d'abord).
+- [x] `docker-compose.yml` corrigé (chemins relatifs, ports configurables, commande worker Celery).
+
 ### Phase 3 — Intégration réelle des paiements
 
 - [ ] Intégration **Paystack**:
   - [ ] Endpoint d'initialisation transaction (appel API Paystack).
   - [ ] Redirection vers la page de paiement Paystack.
   - [ ] Webhook Paystack complet:
-    - [ ] Validation de signature `x-paystack-signature` (HMAC SHA512).
+    - [x] Validation de signature `x-paystack-signature` (HMAC SHA512).
     - [ ] Vérification du statut transaction via API Paystack.
     - [ ] Gestion idempotence (pas de double activation).
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from celery_app import celery_app
 from broadlink_service import send_ir_command
@@ -16,15 +16,11 @@ def activate_session(session_id: int) -> None:
         station = session.station
         offer = session.offer
         send_ir_command(station.broadlink_ip, station.ir_code_hdmi2)
+        now = datetime.utcnow().replace(microsecond=0)
         session.status = "active"
         session.payment_status = "paid"
-        session.started_at = datetime.utcnow()
-        session.end_at = datetime.utcnow() + (offer.duration_minutes * datetime.resolution)
-        # Correction en secondes pour eviter approximation datetime.resolution.
-        session.end_at = datetime.utcnow().replace(microsecond=0)
-        session.end_at = session.end_at.fromtimestamp(
-            session.end_at.timestamp() + (offer.duration_minutes * 60)
-        )
+        session.started_at = now
+        session.end_at = now + timedelta(minutes=offer.duration_minutes)
         db.add(
             EventLog(
                 level="info",

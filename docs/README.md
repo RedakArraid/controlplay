@@ -29,3 +29,58 @@ et le système bascule la TV sur l'entrée HDMI de la console pendant la durée 
    - envoie la commande IR pour passer la TV sur HDMI 2 (console)
    - programme la désactivation à la fin du temps (retour HDMI 1).
 
+### Démarrage rapide (dev)
+
+#### 1) Prérequis
+
+- Docker Desktop installé et démarré
+- `make` disponible dans le terminal
+
+#### 2) Initialiser la configuration
+
+Depuis la racine du projet :
+
+```bash
+make init-env
+```
+
+Cette commande crée `.env` à partir de `.env.example` si le fichier n'existe pas.
+
+#### 3) Lancer l'environnement
+
+```bash
+make up
+```
+
+Services démarrés :
+
+- `app` sur `http://localhost:${APP_PORT}` (par défaut `8000`)
+- `db` exposé sur `${DB_PORT}` (par défaut `5432`)
+- `redis` exposé sur `${REDIS_PORT}` (par défaut `6379`)
+
+Tu peux changer les ports à la volée :
+
+```bash
+make up APP_PORT=8001 DB_PORT=5433 REDIS_PORT=6380
+```
+
+#### 4) Appliquer les migrations (Alembic)
+
+Après démarrage des services :
+
+```bash
+make migrate
+```
+
+Alternative en une seule commande (démarrage + migration) :
+
+```bash
+make bootstrap
+```
+
+#### 5) Arrêter les services
+
+```bash
+make down
+```
+

@@ -1,15 +1,15 @@
 services:
   app:
     build:
-      context: /Users/kader/Desktop/control/controlplay
-      dockerfile: /Users/kader/Desktop/control/controlplay/app/Dockerfile
+      context: .
+      dockerfile: app/Dockerfile
     container_name: controlplay-app
     env_file:
-      - /Users/kader/Desktop/control/controlplay/.env
+      - .env
     volumes:
-      - /Users/kader/Desktop/control/controlplay/app:/app
+      - ./app:/app
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -19,20 +19,20 @@ services:
 
   worker:
     build:
-      context: /Users/kader/Desktop/control/controlplay
-      dockerfile: /Users/kader/Desktop/control/controlplay/worker/Dockerfile
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: controlplay-worker
     env_file:
-      - /Users/kader/Desktop/control/controlplay/.env
+      - .env
     volumes:
-      - /Users/kader/Desktop/control/controlplay/app:/app
-      - /Users/kader/Desktop/control/controlplay/worker:/worker
+      - ./app:/app
+      - ./worker:/worker
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A worker.celery_app worker --loglevel=INFO
+    command: celery -A worker:celery_app worker --loglevel=INFO --queues controlplay
 
   db:
     image: postgres:16-alpine
@@ -44,7 +44,7 @@ services:
     volumes:
       - controlplay-db-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U controlplay -d controlplay"]
       interval: 5s
@@ -55,7 +55,7 @@ services:
     image: redis:7-alpine
     container_name: controlplay-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

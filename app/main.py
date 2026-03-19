@@ -16,7 +16,8 @@ from tasks import activate_session
 
 
 app = FastAPI(title="ControlPlay")
-Base.metadata.create_all(bind=engine)
+if os.getenv("AUTO_CREATE_SCHEMA", "false").lower() == "true":
+    Base.metadata.create_all(bind=engine)
 
 
 def log_event(db: Session, message: str, level: str = "info", station_id=None, session_id=None):
