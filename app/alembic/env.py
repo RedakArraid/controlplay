@@ -9,9 +9,8 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-APP_DIR = BASE_DIR / "app"
-if str(APP_DIR) not in sys.path:
-    sys.path.insert(0, str(APP_DIR))
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 from database import Base  # noqa: E402
 from models import EventLog, GameSession, Offer, Station  # noqa: F401,E402

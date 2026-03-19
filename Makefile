@@ -22,17 +22,17 @@ up:
 
 .PHONY: migrate
 migrate:
-	docker compose exec app alembic upgrade head
+	docker compose exec app sh -lc "cd /app && alembic -c alembic.ini upgrade head"
 
 .PHONY: revision
 revision:
 	@if [ -z "$(message)" ]; then echo "Usage: make revision message='description'"; exit 1; fi
-	docker compose exec app alembic revision --autogenerate -m "$(message)"
+	docker compose exec app sh -lc "cd /app && alembic -c alembic.ini revision --autogenerate -m \"$(message)\""
 
 .PHONY: bootstrap
 bootstrap:
 	APP_PORT=$(APP_PORT) DB_PORT=$(DB_PORT) REDIS_PORT=$(REDIS_PORT) docker compose up -d --build
-	docker compose exec app alembic upgrade head
+	docker compose exec app sh -lc "cd /app && alembic -c alembic.ini upgrade head"
 
 .PHONY: down
 down:

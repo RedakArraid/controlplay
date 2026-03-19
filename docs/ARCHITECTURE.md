@@ -24,6 +24,11 @@
       - renvoie la TV sur HDMI1
       - clôt la session
 
+- **Alembic (migrations)**
+  - Config dans `app/alembic.ini`.
+  - Scripts dans `app/alembic/versions`.
+  - Exécution via `make migrate` ou `make bootstrap` (dans le conteneur `app`).
+
 - **Broadlink RM Mini 3**
   - Piloté via `broadlink_service.send_ir_command(ip, ir_code)`.
   - Mode dry-run contrôlé par `BROADLINK_DRY_RUN` :
@@ -64,6 +69,7 @@ Voir `.env` à la racine :
 - Application / infra:
   - `APP_ENV`, `APP_SECRET_KEY`, `BASE_URL`
   - `DATABASE_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`
+  - `AUTO_CREATE_SCHEMA` (`false` recommandé quand Alembic est utilisé)
 
 - Broadlink:
   - `BROADLINK_IP`
@@ -80,4 +86,10 @@ Voir `.env` à la racine :
   - `CINETPAY_SITE_ID`
   - `CINETPAY_SECRET_KEY`
   - `CINETPAY_WEBHOOK_SECRET`
+
+### État actuel (mars 2026)
+
+- Environnement local validé avec Docker (`app`, `worker`, `db`, `redis`).
+- Endpoints FastAPI opérationnels (incluant `/health`).
+- Migrations Alembic initiales appliquées (`0001_initial_schema`).
 

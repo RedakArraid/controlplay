@@ -10,6 +10,7 @@ et le système bascule la TV sur l'entrée HDMI de la console pendant la durée 
 - **Workers**: Celery (tâches asynchrones)
 - **Base de données**: PostgreSQL
 - **Queue / timers**: Redis
+- **Migrations DB**: Alembic
 - **Contrôle TV**: Broadlink RM Mini 3 (IR) via librairie `broadlink` (mode dry-run possible)
 - **Conteneurisation**: Docker Compose
 
@@ -76,6 +77,16 @@ Alternative en une seule commande (démarrage + migration) :
 
 ```bash
 make bootstrap
+```
+
+Notes importantes :
+
+- La configuration Alembic est dans `/app` (`app/alembic.ini` et `app/alembic/`).
+- Les commandes `make migrate` et `make revision` exécutent Alembic depuis le conteneur `app`.
+- En cas de problème local Buildx/permissions Docker, tu peux utiliser :
+
+```bash
+DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 make bootstrap
 ```
 
 #### 5) Arrêter les services

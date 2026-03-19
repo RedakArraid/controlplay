@@ -1,6 +1,6 @@
 ## Plan pour terminer le MVP
 
-### Phase 1 — Stabiliser le socle (en cours)
+### Phase 1 — Stabiliser le socle (terminé)
 
 - [x] Docker Compose avec `app`, `worker`, `db`, `redis`.
 - [x] FastAPI + Celery + PostgreSQL + Redis configurés.
@@ -27,9 +27,10 @@
 
 - [x] Ajout de `.env.example` pour faciliter l'initialisation locale.
 - [x] Ajout d'un `Makefile` (`init-env`, `up`, `down`, `migrate`, `bootstrap`, `revision`).
-- [x] Intégration d'Alembic avec migration initiale (`0001_initial_schema`).
+- [x] Intégration d'Alembic dans `app/` avec migration initiale (`0001_initial_schema`).
 - [x] Passage de `AUTO_CREATE_SCHEMA=false` par défaut (migrations d'abord).
 - [x] `docker-compose.yml` corrigé (chemins relatifs, ports configurables, commande worker Celery).
+- [x] Validation de démarrage complet en local (`make bootstrap`) et endpoint `/health`.
 
 ### Phase 3 — Intégration réelle des paiements
 
