@@ -2624,9 +2624,20 @@ def admin_salles(db: Session = Depends(get_db), _: str = Depends(require_admin))
         ]
     )
 
-    rows = "".join(
-        [
-            f"<tr>"
+    row_parts: list[str] = []
+    for sl in salles:
+        can_edit_salle = super_admin or sl.id in salle_admin_ids
+        edit_cell = (
+            f'<a href="/admin/salles/{sl.id}/edit">Edit</a>' if can_edit_salle else ""
+        )
+        delete_cell = (
+            f'<form method="post" action="/admin/salles/{sl.id}/delete">'
+            f'<button type="submit">Delete</button></form>'
+            if can_edit_salle
+            else ""
+        )
+        row_parts.append(
+            "<tr>"
             f"<td>{sl.id}</td>"
             f"<td>{sl.code}</td>"
             f"<td>{sl.name}</td>"
@@ -2634,15 +2645,12 @@ def admin_salles(db: Session = Depends(get_db), _: str = Depends(require_admin))
             f"<td>{', '.join(names_by_salle_role.get((sl.id, responsable_role_key), []))}</td>"
             f"<td><a href='/admin/salles/{sl.id}/offers'>Offres</a></td>"
             f"<td><a href='/admin/salles/{sl.id}/stations'>Stations</a></td>"
-            f"<td>{('<a href=\"/admin/salles/%s/edit\">Edit</a>' % sl.id) if (super_admin or sl.id in salle_admin_ids) else ''}</td>"
+            f"<td>{edit_cell}</td>"
             f"<td><a href='/admin/salles/{sl.id}/users'>Users</a></td>"
-            f"<td>"
-            f"{('<form method=\"post\" action=\"/admin/salles/%s/delete\"><button type=\"submit\">Delete</button></form>' % sl.id) if (super_admin or sl.id in salle_admin_ids) else ''}"
-            f"</td>"
-            f"</tr>"
-            for sl in salles
-        ]
-    )
+            f"<td>{delete_cell}</td>"
+            "</tr>"
+        )
+    rows = "".join(row_parts)
     return HTMLResponse(
         "<h1>Admin Salles</h1>"
         "<form method='post' action='/admin/salles'>"
