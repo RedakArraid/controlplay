@@ -10,6 +10,7 @@ help:
 	@echo "  migrate    - Applique les migrations Alembic (upgrade head)"
 	@echo "  revision   - Crée une nouvelle migration Alembic (message=...)"
 	@echo "  bootstrap  - Démarre les services puis applique les migrations"
+	@echo "  reset-admin - Réinitialise le mot de passe admin (ADMIN_* dans .env)"
 	@echo "  down       - Arrête les conteneurs"
 
 .PHONY: init-env
@@ -37,4 +38,10 @@ bootstrap:
 .PHONY: down
 down:
 	docker compose down
+
+# Réinitialise le hash bcrypt du user identifié par ADMIN_USERNAME (email ou phone)
+# avec ADMIN_PASSWORD (voir .env). Utile si /admin renvoie 401 après un changement manuel en DB.
+.PHONY: reset-admin
+reset-admin:
+	docker compose exec app sh -lc "cd /app && python reset_admin_password.py"
 

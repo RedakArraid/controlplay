@@ -110,3 +110,15 @@ DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 make bootstrap
 make down
 ```
 
+#### Admin `/admin` : erreur **401**
+
+L’admin utilise **HTTP Basic Auth** : identifiant = **email ou téléphone** du compte dans la table `users`, mot de passe = hash bcrypt en base (aligné sur `ADMIN_USERNAME` / `ADMIN_PASSWORD` au bootstrap).
+
+Si le navigateur garde un ancien mot de passe ou si la base a divergé du `.env`, réinitialise depuis la racine du projet :
+
+```bash
+make reset-admin
+```
+
+Puis reconnecte-toi avec les valeurs de ton `.env` (par défaut dans `.env.example` : `admin@gmail.com` / `admin123`).
+
