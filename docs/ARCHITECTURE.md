@@ -63,6 +63,7 @@
   - Les rôles scoppés (`salle_admin`, `manager`, `responsable`) ne voient et ne modifient que les entités rattachées aux `salles` autorisées via `salle_users` (filtrage sur les pages admin : dashboard/offres/stations/sessions, etc.).
   - `/admin/users` reste accessible uniquement aux `super_admin`.
   - Au démarrage, le couple `ADMIN_USERNAME` / `ADMIN_PASSWORD` crée un **super_admin** global **sauf si** ce compte a déjà le rôle `salle_admin` dans `salle_users` (évite de re-promouvoir un compte volontairement limité aux salles ; voir `make admin-salle-only` dans `docs/README.md`).
+  - Compte super admin dédié : `make ensure-super-admin` (défaut `superadmin@controlplay.com`, voir `SUPER_ADMIN_*` dans `.env.example`).
 
 - `stations`
   - `code` (pour le QR)

@@ -132,3 +132,13 @@ make admin-salle-only
 
 Le démarrage de l’app ne re-promouvra plus ce compte en `super_admin` tant qu’il a déjà le rôle `salle_admin` en base.
 
+#### Super administrateur global (`super_admin`)
+
+Pour créer ou mettre à jour un compte propriétaire (accès `/admin/users`, `/admin/providers`, etc.) :
+
+```bash
+make ensure-super-admin
+```
+
+Par défaut : `superadmin@controlplay.com` / `admin123` (modifiable via `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME` dans `.env`).
+

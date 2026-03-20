@@ -12,6 +12,7 @@ help:
 	@echo "  bootstrap  - Démarre les services puis applique les migrations"
 	@echo "  reset-admin - Réinitialise le mot de passe admin (ADMIN_* dans .env)"
 	@echo "  admin-salle-only - ADMIN_USERNAME devient salle_admin (toutes les salles), sans super_admin"
+	@echo "  ensure-super-admin - Crée/met à jour superadmin@controlplay.com (SUPER_ADMIN_* dans .env)"
 	@echo "  down       - Arrête les conteneurs"
 
 .PHONY: init-env
@@ -49,4 +50,10 @@ reset-admin:
 .PHONY: admin-salle-only
 admin-salle-only:
 	docker compose exec app sh -lc "cd /app && python demote_env_admin_to_salle_admin.py"
+
+# Compte propriétaire global (super_admin). Variables optionnelles dans .env :
+# SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, SUPER_ADMIN_NAME
+.PHONY: ensure-super-admin
+ensure-super-admin:
+	docker compose exec app sh -lc "cd /app && python ensure_super_admin.py"
 
