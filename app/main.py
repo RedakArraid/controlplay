@@ -823,21 +823,39 @@ def seed_default_data() -> None:
                         db.add(existing_user)
                         db.flush()
 
-                    # Attribuer super_admin (sinon legacy admin).
-                    if super_admin_role:
-                        db.add(
-                            UserRole(
-                                user_id=existing_user.id,
-                                role_id=super_admin_role.id,
+                    # Ne pas re-promouvoir en super_admin / admin un compte déjà configuré
+                    # uniquement comme `salle_admin` (ex: après migration manuelle des rôles).
+                    salle_admin_role_check = (
+                        db.query(Role).filter(Role.key == "salle_admin").first()
+                    )
+                    has_salle_admin_only_bootstrap = False
+                    if existing_user and salle_admin_role_check:
+                        has_salle_admin_only_bootstrap = (
+                            db.query(SalleUser)
+                            .filter(
+                                SalleUser.user_id == existing_user.id,
+                                SalleUser.role_id == salle_admin_role_check.id,
                             )
+                            .first()
+                            is not None
                         )
-                    if admin_role_legacy:
-                        db.add(
-                            UserRole(
-                                user_id=existing_user.id,
-                                role_id=admin_role_legacy.id,
+
+                    if not has_salle_admin_only_bootstrap:
+                        # Attribuer super_admin (sinon legacy admin).
+                        if super_admin_role:
+                            db.add(
+                                UserRole(
+                                    user_id=existing_user.id,
+                                    role_id=super_admin_role.id,
+                                )
                             )
-                        )
+                        if admin_role_legacy:
+                            db.add(
+                                UserRole(
+                                    user_id=existing_user.id,
+                                    role_id=admin_role_legacy.id,
+                                )
+                            )
 
         db.commit()
     finally:

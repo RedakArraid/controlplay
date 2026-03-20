@@ -11,6 +11,7 @@ help:
 	@echo "  revision   - Crée une nouvelle migration Alembic (message=...)"
 	@echo "  bootstrap  - Démarre les services puis applique les migrations"
 	@echo "  reset-admin - Réinitialise le mot de passe admin (ADMIN_* dans .env)"
+	@echo "  admin-salle-only - ADMIN_USERNAME devient salle_admin (toutes les salles), sans super_admin"
 	@echo "  down       - Arrête les conteneurs"
 
 .PHONY: init-env
@@ -44,4 +45,8 @@ down:
 .PHONY: reset-admin
 reset-admin:
 	docker compose exec app sh -lc "cd /app && python reset_admin_password.py"
+
+.PHONY: admin-salle-only
+admin-salle-only:
+	docker compose exec app sh -lc "cd /app && python demote_env_admin_to_salle_admin.py"
 

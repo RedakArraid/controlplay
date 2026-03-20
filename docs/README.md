@@ -122,3 +122,13 @@ make reset-admin
 
 Puis reconnecte-toi avec les valeurs de ton `.env` (par défaut dans `.env.example` : `admin@gmail.com` / `admin123`).
 
+#### Compte `.env` en **salle_admin** uniquement (plus de super admin global)
+
+Si `ADMIN_USERNAME` doit être un **admin de salle** seulement (accès admin filtré par salles, **sans** `/admin/users` ni `/admin/providers`) :
+
+```bash
+make admin-salle-only
+```
+
+Le démarrage de l’app ne re-promouvra plus ce compte en `super_admin` tant qu’il a déjà le rôle `salle_admin` en base.
+
