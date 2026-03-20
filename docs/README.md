@@ -1,8 +1,9 @@
 ## Vue d'ensemble du projet ControlPlay
 
 ControlPlay permet de contrôler des TV de stations de jeu via des requêtes HTTP et des paiements en ligne.
-Un client scanne un QR code affiché sur la TV, choisit une offre (durée + prix), paie (Paystack ou CinetPay),
-et le système bascule la TV sur l'entrée HDMI de la console pendant la durée achetée, puis revient à l'écran d'accueil.
+Un client scanne un QR code affiché sur la TV, choisit une offre (durée + prix),
+et le système lance le paiement automatiquement avec **Paystack en priorité** et **CinetPay en backup** (sans choix du provider côté utilisateur).
+Le système bascule ensuite la TV sur l'entrée HDMI de la console pendant la durée achetée, puis revient à l'écran d'accueil.
 
 ### Stack technique
 
@@ -25,8 +26,19 @@ et le système bascule la TV sur l'entrée HDMI de la console pendant la durée 
 
 1. La TV affiche la page d'accueil de la station avec un QR unique.
 2. Le client scanne le QR, arrive sur `/s/{station_code}` et choisit une offre (durée + prix).
-3. Le backend crée une session de jeu et redirige vers le paiement (MVP: simulation, ensuite Paystack/CinetPay).
-4. À la confirmation de paiement (webhook PSP ou simulation), une tâche worker active la session :
+   Les offres sont des templates rattachés via l'admin :
+   - directement à la station (`station_offers`)
+   - ou via la salle de la station (`salle_offers`)
+   Les salles peuvent aussi être annotées côté admin via des utilisateurs (rôle gérant / responsable) et des coordonnées GPS.
+   Le formulaire de paiement :
+   - `connexion` optionnelle : si cochée, `phone` est obligatoire et `email` reste optionnel
+   - si non cochée (mode invité), `email` et `phone` peuvent être vides (associé à `default_user`)
+3. Le backend crée une session de jeu et redirige vers le paiement :
+   - L'admin peut désactiver Paystack via `/admin/providers` pour basculer vers CinetPay (si disponible).
+   - Pour supervision, un récapitulatif est disponible via `/admin/dashboard`.
+   - **MVP/dev**: simulation (si les clés PSP ne sont pas configurées)
+   - **production**: initialisation Paystack, fallback CinetPay si nécessaire
+4. À la confirmation de paiement (webhook PSP / retour PSP ou simulation), une tâche worker active la session :
    - envoie la commande IR pour passer la TV sur HDMI 2 (console)
    - programme la désactivation à la fin du temps (retour HDMI 1).
 

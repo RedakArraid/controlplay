@@ -6,10 +6,14 @@
 - [x] FastAPI + Celery + PostgreSQL + Redis configurés.
 - [x] Modèles: `Station`, `Offer`, `GameSession`, `EventLog`.
 - [x] Admin HTML basique pour créer:
-  - [x] des offres (durée, prix, provider)
+  - [x] des offres (durée, prix, provider) en tant que templates
+  - [x] rattachement des templates via `station_offers` / `salle_offers` (configuration par station et par salle)
+  - [x] duplication / rattachement en masse des templates globales vers plusieurs stations d'une salle
   - [x] des stations (code, IP Broadlink, codes IR).
 - [x] Génération de QR codes par station.
 - [x] Simulation de paiement avec redirection interne.
+- [x] Mode invité / connexion optionnelle au paiement (associe à `default_user`)
+- [x] UI client sans choix de provider (Paystack prioritaire, CinétPay en backup côté serveur).
 - [x] Tâches Celery pour activer et désactiver une session (en mode Broadlink dry-run).
 
 ### Phase 2 — Finaliser le MVP fonctionnel (en cours)
@@ -20,7 +24,7 @@
   - [ ] Création d’une offre via `/admin/offers`.
   - [ ] Scan QR → sélection offre → simulation paiement.
   - [ ] Vérifier création session + déclenchement des tâches Celery.
-- [ ] Consolider les statuts de session (cas d’erreur paiement, annulation, etc.).
+- [ ] Consolider les statuts de session (cas d’erreur paiement, annulation, etc.) (reste surtout côté PSP: reprises/idempotence “métier”).
 - [ ] Ajouter un minimum de logs lisibles (plutôt que uniquement `EventLog` brute).
 
 #### Livrables récents (mars 2026)
@@ -35,20 +39,22 @@
 ### Phase 3 — Intégration réelle des paiements
 
 - [ ] Intégration **Paystack**:
-  - [ ] Endpoint d'initialisation transaction (appel API Paystack).
-  - [ ] Redirection vers la page de paiement Paystack.
+  - [x] Endpoint d'initialisation transaction (appel API Paystack).
+  - [x] Checkout Paystack tolérant email optionnel (placeholder) + référence sans `_`
+  - [x] Redirection vers la page de paiement Paystack.
+  - [x] Retour Paystack côté serveur (fallback automatique vers CinetPay si échec).
   - [ ] Webhook Paystack complet:
     - [x] Validation de signature `x-paystack-signature` (HMAC SHA512).
-    - [ ] Vérification du statut transaction via API Paystack.
-    - [ ] Gestion idempotence (pas de double activation).
+    - [x] Vérification du statut transaction via API Paystack.
+    - [x] Gestion idempotence (garde-fous sur état de session + station).
 
 - [ ] Intégration **CinetPay**:
-  - [ ] Appel API de création de paiement.
-  - [ ] Gestion du retour / redirection.
+  - [x] Appel API de création de paiement.
+  - [x] Gestion du retour / redirection.
   - [ ] Webhook CinetPay:
-    - [ ] Vérification `x-token` (HMAC SHA256).
-    - [ ] Vérification de la transaction via `payment/check`.
-    - [ ] Gestion idempotence.
+    - [x] Vérification `x-token` (HMAC SHA256).
+    - [x] Vérification de la transaction via `payment/check`.
+    - [x] Gestion idempotence (garde-fous sur état de session + station).
 
 ### Phase 4 — Validation matérielle Broadlink
 

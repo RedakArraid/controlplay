@@ -13,7 +13,23 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from database import Base  # noqa: E402
-from models import EventLog, GameSession, Offer, Station  # noqa: F401,E402
+from models import (  # noqa: F401,E402
+    EventLog,
+    GameSession,
+    Offer,
+    Salle,
+    SalleOffer,
+    SessionExtension,
+    Station,
+    StationOffer,
+    PaymentProviderConfig,
+    User,
+    Role,
+    Permission,
+    RolePermission,
+    UserRole,
+    SalleUser,
+)
 
 config = context.config
 
