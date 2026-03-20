@@ -1178,6 +1178,9 @@ def simulate_payment(reference: str, status: str, email: str = "", db: Session =
                 "<p><a href='/'>Retour accueil</a></p>"
             )
 
+        station_code = new_session.station.code if new_session.station else None
+        if station_code:
+            return RedirectResponse(url=f"/s/{station_code}", status_code=303)
         return HTMLResponse(
             f"<h1>Paiement valide (fallback)</h1><p>Reference initiale: {reference}</p><p>Reference fallback: {new_reference}</p>"
             "<p>La TV devrait basculer sur HDMI2.</p>"
@@ -1185,6 +1188,9 @@ def simulate_payment(reference: str, status: str, email: str = "", db: Session =
         )
 
     activate_paid_session(db, session, "simulate", trusted=True)
+    station_code = session.station.code if session.station else None
+    if station_code:
+        return RedirectResponse(url=f"/s/{station_code}", status_code=303)
     return HTMLResponse(
         f"<h1>Paiement valide</h1><p>Reference: {reference}</p>"
         "<p>La TV devrait basculer sur HDMI2.</p>"
@@ -1199,8 +1205,36 @@ def paystack_return(reference: str, request: Request, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Reference introuvable")
 
     callback_status = (request.query_params.get("status") or request.query_params.get("payment_status") or "").lower()
+    station_code = session.station.code if session.station else None
+
     if session.payment_status == "paid" or session.status == "active":
+        if station_code:
+            return RedirectResponse(url=f"/s/{station_code}", status_code=303)
         return HTMLResponse("<h1>Paiement confirme</h1><p>La TV sera activee.</p><p><a href='/'>Retour accueil</a></p>")
+
+    # En général, l'activation réelle arrive via webhook.
+    # Mais Paystack “return” peut arriver sans `status=` (ex: seulement `trxref`/`reference`).
+    # Donc on tente une vérification + activation côté serveur ici aussi.
+    if (
+        session.payment_provider == "paystack"
+        and is_paystack_api_configured()
+        and session.status == "pending"
+        and session.payment_status != "paid"
+    ):
+        if verify_paystack_transaction(reference):
+            activate_paid_session(db, session, "paystack_return", trusted=False)
+            db.refresh(session)
+
+    # Si on a réussi, on renvoie sur la page de la station.
+    if (session.payment_status == "paid" or session.status == "active") and station_code:
+        return RedirectResponse(url=f"/s/{station_code}", status_code=303)
+
+    # Sinon, on redirige quand même sur la station (pour que l'utilisateur puisse
+    # voir la session et attendre l'activation via webhook/worker).
+    if station_code:
+        return RedirectResponse(url=f"/s/{station_code}", status_code=303)
+
+    return HTMLResponse("<h1>Paiement en attente</h1><p>Merci de patienter.</p><p><a href='/'>Retour accueil</a></p>")
 
 
 @app.get("/payments/return/extension/paystack/{reference}", response_class=HTMLResponse)
@@ -1209,7 +1243,13 @@ def paystack_extension_return(reference: str, request: Request, db: Session = De
     if not extension:
         raise HTTPException(status_code=404, detail="Reference introuvable")
 
+    station_code = None
+    if extension.session and extension.session.station:
+        station_code = extension.session.station.code
+
     if extension.status == "applied" or extension.payment_status == "paid":
+        if station_code:
+            return RedirectResponse(url=f"/s/{station_code}", status_code=303)
         return HTMLResponse("<h1>Extension confirmée</h1><p>Temps ajouté.</p><p><a href='/'>Retour accueil</a></p>")
 
     if not is_paystack_api_configured():
@@ -1217,6 +1257,8 @@ def paystack_extension_return(reference: str, request: Request, db: Session = De
 
     if verify_paystack_transaction(reference):
         apply_paid_extension(db, extension, "paystack_extension_return", trusted=True)
+        if station_code:
+            return RedirectResponse(url=f"/s/{station_code}", status_code=303)
         return HTMLResponse("<h1>Extension confirmée</h1><p>Temps ajouté.</p><p><a href='/'>Retour accueil</a></p>")
 
     extension.payment_status = "failed"
@@ -1307,9 +1349,14 @@ async def cinetpay_return(request: Request, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(status_code=404, detail="Reference introuvable")
 
+    station_code = session.station.code if session.station else None
     if session.payment_status == "paid" or session.status == "active":
+        if station_code:
+            return RedirectResponse(url=f"/s/{station_code}", status_code=303)
         return HTMLResponse("<h1>Paiement confirme</h1><p>La TV sera activee.</p><p><a href='/'>Retour accueil</a></p>")
 
+    if station_code:
+        return RedirectResponse(url=f"/s/{station_code}", status_code=303)
     return HTMLResponse(
         "<h1>Paiement en attente / echoue</h1>"
         "<p>Merci de patienter (validation via webhook).</p>"

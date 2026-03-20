@@ -14,6 +14,7 @@
     - retours paiements:
       - `/payments/return/paystack/{reference}`
       - `/payments/return/cinetpay`
+    - Après confirmation, l'utilisateur est redirigé vers la page de station `/s/{station_code}` pour pouvoir ajouter du temps (session active via worker / webhook).
     - webhooks: `/webhooks/paystack`, `/webhooks/cinetpay`
     - santé: `/health`
   - Gère:

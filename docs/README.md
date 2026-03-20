@@ -38,9 +38,11 @@ Le système bascule ensuite la TV sur l'entrée HDMI de la console pendant la du
    - Pour supervision, un récapitulatif est disponible via `/admin/dashboard`.
    - **MVP/dev**: simulation (si les clés PSP ne sont pas configurées)
    - **production**: initialisation Paystack, fallback CinetPay si nécessaire
-4. À la confirmation de paiement (webhook PSP / retour PSP ou simulation), une tâche worker active la session :
+4. À la confirmation de paiement (webhook PSP / retour PSP ou simulation) :
+   - une tâche worker active la session
    - envoie la commande IR pour passer la TV sur HDMI 2 (console)
-   - programme la désactivation à la fin du temps (retour HDMI 1).
+   - programme la désactivation à la fin du temps (retour HDMI 1)
+   - l’utilisateur est redirigé vers la page de la station `/s/{station_code}` pour pouvoir ajouter du temps
 
 ### Démarrage rapide (dev)
 
