@@ -29,7 +29,8 @@ Le système bascule ensuite la TV sur l'entrée HDMI de la console pendant la du
    Les offres sont des templates rattachés via l'admin :
    - directement à la station (`station_offers`)
    - ou via la salle de la station (`salle_offers`)
-   Les salles peuvent aussi être annotées côté admin via des utilisateurs (rôle gérant / responsable) et des coordonnées GPS.
+   Les salles peuvent aussi être annotées côté admin via des utilisateurs (rôle `manager` / `responsable`) et des coordonnées GPS.
+   Les admins sont gérés en RBAC : `super_admin` (global) et `salle_admin` (scopé par salle) via `/admin/salles/{id}/users`.
    Le formulaire de paiement :
    - `connexion` optionnelle : si cochée, `phone` est obligatoire et `email` reste optionnel
    - si non cochée (mode invité), `email` et `phone` peuvent être vides (associé à `default_user`)

@@ -50,13 +50,18 @@
   - `name`
   - `latitude`, `longitude`
   - regroupe des `stations`
-  - gérant / responsable via la liaison `salle_users` (avec rôles)
+  - rôles admin scoppés via `salle_users` : `salle_admin` (CRUD salles) et `manager` / `responsable` (gestion stations/offres/sessions)
 
 - `users` / RBAC
   - `users` (email/phone + `password_hash`, `is_active`)
-  - `roles` (admin/manager/responsable/joueur)
-  - `user_roles` (rôles globaux, ex: `admin`)
-  - `salle_users` (rôles par salle : gérant / responsable)
+  - `roles` (`super_admin`, `salle_admin`, `manager`, `responsable`, `joueur`, ...)
+  - `user_roles` (rôles globaux, ex: `super_admin`)
+  - `salle_users` (rôles par salle : `salle_admin` / `manager` / `responsable`)
+  - endpoint admin : `GET/POST /admin/salles/{id}/users` (création/assignment des `manager` / `responsable` et, pour `super_admin`, option `salle_admin`)
+- **Scoping admin** :
+  - `super_admin` a accès global.
+  - Les rôles scoppés (`salle_admin`, `manager`, `responsable`) ne voient et ne modifient que les entités rattachées aux `salles` autorisées via `salle_users` (filtrage sur les pages admin : dashboard/offres/stations/sessions, etc.).
+  - `/admin/users` reste accessible uniquement aux `super_admin`.
 
 - `stations`
   - `code` (pour le QR)

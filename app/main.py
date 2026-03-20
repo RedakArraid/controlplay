@@ -90,14 +90,25 @@ def require_admin(
             headers={"WWW-Authenticate": "Basic"},
         )
 
-    is_admin = (
+    # Super admin global (rôles globaux) : super_admin + compat legacy admin.
+    global_admin = (
         db.query(UserRole)
         .join(Role, Role.id == UserRole.role_id)
         .filter(UserRole.user_id == user.id)
-        .filter(Role.key == "admin")
+        .filter(Role.key.in_(("super_admin", "admin")))
         .first()
     )
-    if not is_admin:
+
+    # Admin scoppé : salle_admin ou gérant/responsable (rôles par salle).
+    scoped_admin = (
+        db.query(SalleUser)
+        .join(Role, Role.id == SalleUser.role_id)
+        .filter(SalleUser.user_id == user.id)
+        .filter(Role.key.in_(("salle_admin", "manager", "responsable")))
+        .first()
+    )
+
+    if not (global_admin or scoped_admin):
         raise HTTPException(
             status_code=401,
             detail="Identifiants admin invalides",
@@ -105,6 +116,87 @@ def require_admin(
         )
 
     return str(user.id)
+
+
+def is_global_super_admin(db: Session, user_id: int) -> bool:
+    return (
+        db.query(UserRole)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(UserRole.user_id == user_id)
+        .filter(Role.key.in_(("super_admin", "admin")))
+        .first()
+        is not None
+    )
+
+
+def get_scoped_salle_ids(db: Session, user_id: int) -> list[int]:
+    """
+    Salles autorisées à un admin scoppé :
+    - salle_admin
+    - manager / responsable (ont aussi les droits de gestion de stations/offers/sessions)
+    """
+
+    rows = (
+        db.query(SalleUser.salle_id)
+        .join(Role, Role.id == SalleUser.role_id)
+        .filter(SalleUser.user_id == user_id)
+        .filter(Role.key.in_(("salle_admin", "manager", "responsable")))
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def get_salle_admin_salle_ids(db: Session, user_id: int) -> list[int]:
+    """Salles pour lesquelles l'utilisateur est explicitement `salle_admin` (CRUD salles)."""
+
+    rows = (
+        db.query(SalleUser.salle_id)
+        .join(Role, Role.id == SalleUser.role_id)
+        .filter(SalleUser.user_id == user_id)
+        .filter(Role.key == "salle_admin")
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def get_allowed_station_ids(db: Session, user_id: int) -> list[int]:
+    """
+    Stations autorisées pour un admin scoppé :
+    - station dans une salle autorisée
+    """
+
+    allowed_salles = get_scoped_salle_ids(db, user_id)
+    if not allowed_salles:
+        return []
+    rows = db.query(Station.id).filter(Station.salle_id.in_(allowed_salles)).all()
+    return [r[0] for r in rows]
+
+
+def get_allowed_offer_ids_for_user(db: Session, user_id: int) -> set[int]:
+    """Offres autorisées à un admin scoppé : attachées via salle_offers/station_offers à ses salles."""
+    if is_global_super_admin(db, user_id):
+        # super admin : toutes les offres
+        rows = db.query(Offer.id).filter(Offer.is_active.is_(True)).all()
+        return {r[0] for r in rows}
+
+    allowed_salles = get_scoped_salle_ids(db, user_id)
+    allowed_stations = get_allowed_station_ids(db, user_id)
+    if not allowed_salles or not allowed_stations:
+        return set()
+
+    offer_ids_station = (
+        db.query(StationOffer.offer_id)
+        .filter(StationOffer.is_active.is_(True))
+        .filter(StationOffer.station_id.in_(allowed_stations))
+        .all()
+    )
+    offer_ids_salle = (
+        db.query(SalleOffer.offer_id)
+        .filter(SalleOffer.is_active.is_(True))
+        .filter(SalleOffer.salle_id.in_(allowed_salles))
+        .all()
+    )
+    return {r[0] for r in (offer_ids_station + offer_ids_salle)}
 
 
 DEFAULT_USER_EMAIL = "default_user@controlplay.local"
@@ -674,7 +766,9 @@ def seed_default_data() -> None:
         # --- Auth / RBAC seed (users/roles) ---
         # On seed des roles minimaux + un admin global de bootstrap.
         role_seed = [
-            ("admin", "Admin global"),
+            ("super_admin", "Super admin (global)"),
+            ("admin", "Admin global (legacy)"),
+            ("salle_admin", "Admin de salle (scopé)"),
             ("manager", "Gérant"),
             ("responsable", "Responsable"),
             ("joueur", "Joueur"),
@@ -683,9 +777,19 @@ def seed_default_data() -> None:
             if not db.query(Role).filter(Role.key == key).first():
                 db.add(Role(key=key, name=name))
 
-        admin_role = db.query(Role).filter(Role.key == "admin").first()
-        if admin_role:
-            admin_exists = db.query(UserRole).filter(UserRole.role_id == admin_role.id).first()
+        super_admin_role = db.query(Role).filter(Role.key == "super_admin").first()
+        admin_role_legacy = db.query(Role).filter(Role.key == "admin").first()
+
+        if super_admin_role or admin_role_legacy:
+            admin_exists = (
+                db.query(UserRole)
+                .filter(
+                    UserRole.role_id.in_(
+                        [r.id for r in [super_admin_role, admin_role_legacy] if r is not None]
+                    )
+                )
+                .first()
+            )
             if not admin_exists:
                 admin_identifier = os.getenv("ADMIN_USERNAME", "admin").strip()
                 admin_password = os.getenv("ADMIN_PASSWORD", "change-me")
@@ -719,7 +823,21 @@ def seed_default_data() -> None:
                         db.add(existing_user)
                         db.flush()
 
-                    db.add(UserRole(user_id=existing_user.id, role_id=admin_role.id))
+                    # Attribuer super_admin (sinon legacy admin).
+                    if super_admin_role:
+                        db.add(
+                            UserRole(
+                                user_id=existing_user.id,
+                                role_id=super_admin_role.id,
+                            )
+                        )
+                    if admin_role_legacy:
+                        db.add(
+                            UserRole(
+                                user_id=existing_user.id,
+                                role_id=admin_role_legacy.id,
+                            )
+                        )
 
         db.commit()
     finally:
@@ -1500,9 +1618,12 @@ def admin_home(_: str = Depends(require_admin)):
 
 @app.get("/admin/users", response_class=HTMLResponse)
 def admin_users(db: Session = Depends(get_db), _: str = Depends(require_admin)):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
     users = db.query(User).order_by(User.id.desc()).limit(200).all()
 
-    admin_role = db.query(Role).filter(Role.key == "admin").first()
+    admin_role = db.query(Role).filter(Role.key.in_(("super_admin", "admin"))).first()
     admin_user_ids: set[int] = set()
     if admin_role:
         admin_user_ids = {r.user_id for r in db.query(UserRole).filter(UserRole.role_id == admin_role.id).all()}
@@ -1551,6 +1672,9 @@ def create_user(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
     email_v = email.strip() or None
     phone_v = phone.strip() or None
 
@@ -1572,10 +1696,12 @@ def create_user(
         db.flush()
 
         if is_admin == "1":
-            admin_role = db.query(Role).filter(Role.key == "admin").first()
-            if not admin_role:
-                raise HTTPException(status_code=500, detail="Role admin manquant")
-            db.add(UserRole(user_id=user.id, role_id=admin_role.id))
+            super_role = db.query(Role).filter(Role.key == "super_admin").first()
+            legacy_role = db.query(Role).filter(Role.key == "admin").first()
+            role_to_use = super_role or legacy_role
+            if not role_to_use:
+                raise HTTPException(status_code=500, detail="Role super_admin/admin manquant")
+            db.add(UserRole(user_id=user.id, role_id=role_to_use.id))
 
         db.commit()
     except IntegrityError as e:
@@ -1587,6 +1713,9 @@ def create_user(
 
 @app.get("/admin/providers", response_class=HTMLResponse)
 def admin_providers(db: Session = Depends(get_db), _: str = Depends(require_admin)):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
     cfg = db.query(PaymentProviderConfig).order_by(PaymentProviderConfig.id.asc()).first()
     if not cfg:
         cfg = PaymentProviderConfig()
@@ -1633,12 +1762,20 @@ def update_providers(
 
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 def admin_dashboard(db: Session = Depends(get_db), _: str = Depends(require_admin)):
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
     now = datetime.utcnow().replace(microsecond=0)
 
     paystack_flag = paystack_enabled()
     cinetpay_flag = cinetpay_enabled()
 
-    stations = db.query(Station).filter(Station.is_active.is_(True)).order_by(Station.id.desc()).all()
+    stations_q = db.query(Station).filter(Station.is_active.is_(True))
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles:
+            return HTMLResponse("<h1>Dashboard admin</h1><p>Aucune salle autorisée.</p><p><a href='/admin'>Retour</a></p>")
+        stations_q = stations_q.filter(Station.salle_id.in_(allowed_salles))
+    stations = stations_q.order_by(Station.id.desc()).all()
 
     rows = []
     for st in stations:
@@ -1684,23 +1821,59 @@ def admin_dashboard(db: Session = Depends(get_db), _: str = Depends(require_admi
 
 @app.get("/admin/offers", response_class=HTMLResponse)
 def admin_offers(db: Session = Depends(get_db), _: str = Depends(require_admin)):
-    used_station_offer_ids = (
-        db.query(StationOffer.offer_id).filter(StationOffer.is_active.is_(True)).distinct().subquery()
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        allowed_stations = get_allowed_station_ids(db, user_id)
+        if not allowed_salles or not allowed_stations:
+            offers = []
+            return HTMLResponse("<h1>Admin Offres</h1><p>Aucune offre autorisée.</p><p><a href='/admin'>Retour</a></p>")
+
+        used_station_offer_ids = (
+            db.query(StationOffer.offer_id)
+            .filter(StationOffer.is_active.is_(True))
+            .filter(StationOffer.station_id.in_(allowed_stations))
+            .distinct()
+            .subquery()
+        )
+        used_salle_offer_ids = (
+            db.query(SalleOffer.offer_id)
+            .filter(SalleOffer.is_active.is_(True))
+            .filter(SalleOffer.salle_id.in_(allowed_salles))
+            .distinct()
+            .subquery()
+        )
+    else:
+        used_station_offer_ids = (
+            db.query(StationOffer.offer_id)
+            .filter(StationOffer.is_active.is_(True))
+            .distinct()
+            .subquery()
+        )
+        used_salle_offer_ids = (
+            db.query(SalleOffer.offer_id)
+            .filter(SalleOffer.is_active.is_(True))
+            .distinct()
+            .subquery()
+        )
+
+    offers_filter = or_(
+        Offer.id.in_(used_station_offer_ids),
+        Offer.id.in_(used_salle_offer_ids),
     )
-    used_salle_offer_ids = (
-        db.query(SalleOffer.offer_id).filter(SalleOffer.is_active.is_(True)).distinct().subquery()
-    )
+    if super_admin:
+        offers_filter = or_(
+            Offer.station_id.is_(None),
+            Offer.id.in_(used_station_offer_ids),
+            Offer.id.in_(used_salle_offer_ids),
+        )
 
     offers = (
         db.query(Offer)
         .filter(Offer.is_active.is_(True))
-        .filter(
-            or_(
-                Offer.station_id.is_(None),  # offres globales (legacy)
-                Offer.id.in_(used_station_offer_ids),
-                Offer.id.in_(used_salle_offer_ids),
-            )
-        )
+        .filter(offers_filter)
         .order_by(Offer.id.desc())
         .all()
     )
@@ -1777,6 +1950,11 @@ def create_offer(
 
 @app.get("/admin/offers/{offer_id}/edit", response_class=HTMLResponse)
 def edit_offer(offer_id: int, db: Session = Depends(get_db), _: str = Depends(require_admin)):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        if offer_id not in allowed_offer_ids:
+            raise HTTPException(status_code=403, detail="Accès refusé")
     offer = db.query(Offer).filter(Offer.id == offer_id).first()
     if not offer:
         raise HTTPException(status_code=404, detail="Offre introuvable")
@@ -1807,6 +1985,11 @@ def update_offer(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        if offer_id not in allowed_offer_ids:
+            raise HTTPException(status_code=403, detail="Accès refusé")
     offer = db.query(Offer).filter(Offer.id == offer_id).first()
     if not offer:
         raise HTTPException(status_code=404, detail="Offre introuvable")
@@ -1831,6 +2014,11 @@ def delete_offer(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        if offer_id not in allowed_offer_ids:
+            raise HTTPException(status_code=403, detail="Accès refusé")
     offer = db.query(Offer).filter(Offer.id == offer_id).first()
     if not offer:
         raise HTTPException(status_code=404, detail="Offre introuvable")
@@ -1852,6 +2040,9 @@ def clone_global_offers_to_all(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
     global_offers = (
         db.query(Offer)
         .filter(and_(Offer.station_id.is_(None), Offer.provider == "paystack", Offer.is_active.is_(True)))
@@ -1902,9 +2093,15 @@ def clone_global_offers_to_station(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
     station = db.query(Station).filter(Station.id == station_id).first()
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
+
+    if not is_global_super_admin(db, user_id):
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if station.salle_id is None or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
 
     global_offers = (
         db.query(Offer)
@@ -1942,9 +2139,15 @@ def clone_global_offers_to_salle(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
     salle = db.query(Salle).filter(Salle.code == salle_code).first()
     if not salle:
         return HTMLResponse("<h1>Salle introuvable</h1><p><a href='/admin/offers'>Retour</a></p>")
+
+    if not is_global_super_admin(db, user_id):
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if salle.id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
 
     global_offers = (
         db.query(Offer)
@@ -1990,8 +2193,27 @@ def clone_global_offers_to_salle(
 
 @app.get("/admin/stations", response_class=HTMLResponse)
 def admin_stations(db: Session = Depends(get_db), _: str = Depends(require_admin)):
-    stations = db.query(Station).order_by(Station.id.desc()).all()
-    salles = db.query(Salle).order_by(Salle.id.desc()).all()
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if super_admin:
+        stations = db.query(Station).order_by(Station.id.desc()).all()
+        salles = db.query(Salle).order_by(Salle.id.desc()).all()
+    else:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles:
+            return HTMLResponse("<h1>Admin Stations</h1><p>Aucune salle autorisée.</p><p><a href='/admin'>Retour</a></p>")
+        stations = (
+            db.query(Station)
+            .filter(Station.salle_id.in_(allowed_salles))
+            .order_by(Station.id.desc())
+            .all()
+        )
+        salles = (
+            db.query(Salle)
+            .filter(Salle.id.in_(allowed_salles))
+            .order_by(Salle.id.desc())
+            .all()
+        )
     salle_by_id = {sl.id: sl.code for sl in salles}
     rows_parts = []
     for s in stations:
@@ -2054,6 +2276,8 @@ def create_station(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
     existing = db.query(Station).filter(Station.code == code).first()
     if existing:
         raise HTTPException(status_code=400, detail="Code station deja utilise")
@@ -2062,7 +2286,14 @@ def create_station(
         salle = db.query(Salle).filter(Salle.code == salle_code).first()
         if not salle:
             raise HTTPException(status_code=404, detail="Salle introuvable")
+        if not super_admin:
+            allowed_salles = get_scoped_salle_ids(db, user_id)
+            if not allowed_salles or salle.id not in allowed_salles:
+                raise HTTPException(status_code=403, detail="Accès refusé")
         salle_id = salle.id
+    else:
+        if not super_admin:
+            raise HTTPException(status_code=403, detail="Salle requise pour un admin scoppé")
     station = Station(
         code=code,
         name=name,
@@ -2083,7 +2314,18 @@ def edit_station(station_id: int, db: Session = Depends(get_db), _: str = Depend
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
 
-    salles = db.query(Salle).order_by(Salle.id.desc()).all()
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    allowed_salles = None
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles or station.salle_id is None or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
+    salles_q = db.query(Salle)
+    if not super_admin:
+        salles_q = salles_q.filter(Salle.id.in_(allowed_salles))
+    salles = salles_q.order_by(Salle.id.desc()).all()
     salle_by_id = {sl.id: sl for sl in salles}
     current_salle_code = ""
     if station.salle_id and station.salle_id in salle_by_id:
@@ -2136,11 +2378,23 @@ def update_station(
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
 
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    allowed_salles = None
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles or station.salle_id is None or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        if not salle_code:
+            raise HTTPException(status_code=403, detail="Salle requise")
+
     station.salle_id = None
     if salle_code:
         salle = db.query(Salle).filter(Salle.code == salle_code).first()
         if not salle:
             raise HTTPException(status_code=404, detail="Salle introuvable")
+        if not super_admin and salle.id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
         station.salle_id = salle.id
 
     station.code = code
@@ -2169,6 +2423,13 @@ def reset_station_sessions(
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
 
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles or station.salle_id is None or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
     active_ids_rows = (
         db.query(GameSession.id)
         .filter(
@@ -2193,6 +2454,13 @@ def delete_station(station_id: int, db: Session = Depends(get_db), _: str = Depe
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
 
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles or station.salle_id is None or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
     used = db.query(GameSession).filter(GameSession.station_id == station_id).count()
     if used > 0:
         raise HTTPException(status_code=400, detail="Station utilisée par des sessions : suppression refusée")
@@ -2209,13 +2477,32 @@ def admin_station_offers(station_id: int, db: Session = Depends(get_db), _: str 
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
 
-    offers = (
-        db.query(Offer)
-        .filter(Offer.provider == "paystack")
-        .filter(Offer.is_active.is_(True))
-        .order_by(Offer.duration_minutes.asc(), Offer.price_xof.asc(), Offer.id.asc())
-        .all()
-    )
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+
+    if super_admin:
+        offers = (
+            db.query(Offer)
+            .filter(Offer.is_active.is_(True))
+            .order_by(Offer.duration_minutes.asc(), Offer.price_xof.asc(), Offer.id.asc())
+            .all()
+        )
+    else:
+        if station.salle_id is None:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        offers = []
+        if allowed_offer_ids:
+            offers = (
+                db.query(Offer)
+                .filter(Offer.id.in_(list(allowed_offer_ids)))
+                .filter(Offer.is_active.is_(True))
+                .order_by(Offer.duration_minutes.asc(), Offer.price_xof.asc(), Offer.id.asc())
+                .all()
+            )
     attached_offer_ids = {
         so.offer_id
         for so in db.query(StationOffer).filter(StationOffer.station_id == station_id, StationOffer.is_active.is_(True)).all()
@@ -2256,9 +2543,22 @@ async def admin_station_offers_post(station_id: int, request: Request, db: Sessi
     if not station:
         raise HTTPException(status_code=404, detail="Station introuvable")
 
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin:
+        if station.salle_id is None:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
     form = await request.form()
     raw_ids = form.getlist("offer_ids")
     offer_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+
+    if not super_admin:
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        offer_ids = [oid for oid in offer_ids if oid in allowed_offer_ids]
 
     # Vérifie que les offres existent et sont actives (sinon on ignore).
     active_ids = {
@@ -2275,11 +2575,27 @@ async def admin_station_offers_post(station_id: int, request: Request, db: Sessi
 
 @app.get("/admin/salles", response_class=HTMLResponse)
 def admin_salles(db: Session = Depends(get_db), _: str = Depends(require_admin)):
-    salles = db.query(Salle).order_by(Salle.id.desc()).all()
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if super_admin:
+        salles = db.query(Salle).order_by(Salle.id.desc()).all()
+    else:
+        allowed_salle_ids = get_scoped_salle_ids(db, user_id)
+        if not allowed_salle_ids:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        salles = (
+            db.query(Salle)
+            .filter(Salle.id.in_(allowed_salle_ids))
+            .order_by(Salle.id.desc())
+            .all()
+        )
 
     manager_role_key = "manager"
     responsable_role_key = "responsable"
     salle_ids = [s.id for s in salles]
+    salle_admin_ids = (
+        set(get_salle_admin_salle_ids(db, user_id)) if not super_admin else set(salle_ids)
+    )
 
     names_by_salle_role: dict[tuple[int, str], list[str]] = {}
     if salle_ids:
@@ -2318,11 +2634,10 @@ def admin_salles(db: Session = Depends(get_db), _: str = Depends(require_admin))
             f"<td>{', '.join(names_by_salle_role.get((sl.id, responsable_role_key), []))}</td>"
             f"<td><a href='/admin/salles/{sl.id}/offers'>Offres</a></td>"
             f"<td><a href='/admin/salles/{sl.id}/stations'>Stations</a></td>"
-            f"<td><a href='/admin/salles/{sl.id}/edit'>Edit</a></td>"
+            f"<td>{('<a href=\"/admin/salles/%s/edit\">Edit</a>' % sl.id) if (super_admin or sl.id in salle_admin_ids) else ''}</td>"
+            f"<td><a href='/admin/salles/{sl.id}/users'>Users</a></td>"
             f"<td>"
-            f"<form method='post' action='/admin/salles/{sl.id}/delete' onsubmit=\"return confirm('Supprimer cette salle ?');\">"
-            f"<button type='submit'>Delete</button>"
-            f"</form>"
+            f"{('<form method=\"post\" action=\"/admin/salles/%s/delete\"><button type=\"submit\">Delete</button></form>' % sl.id) if (super_admin or sl.id in salle_admin_ids) else ''}"
             f"</td>"
             f"</tr>"
             for sl in salles
@@ -2340,7 +2655,7 @@ def admin_salles(db: Session = Depends(get_db), _: str = Depends(require_admin))
         "<div style='margin-top:8px'><b>Responsables</b></div>"
         f"{responsable_choices}"
         "<button type='submit'>Creer salle</button></form>"
-        "<table border='1'><tr><th>ID</th><th>Code</th><th>Nom</th><th>Gérant</th><th>Responsable</th><th>Offres</th><th>Stations</th><th></th><th></th></tr>"
+        "<table border='1'><tr><th>ID</th><th>Code</th><th>Nom</th><th>Gérant</th><th>Responsable</th><th>Offres</th><th>Stations</th><th>Edit</th><th>Users</th><th></th></tr>"
         f"{rows}</table><p><a href='/admin'>Retour</a></p>"
     )
 
@@ -2350,6 +2665,12 @@ def admin_salle_stations(salle_id: int, db: Session = Depends(get_db), _: str = 
     salle = db.query(Salle).filter(Salle.id == salle_id).first()
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
+
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
 
     stations = (
         db.query(Station)
@@ -2396,6 +2717,12 @@ def reset_salle_sessions(salle_id: int, db: Session = Depends(get_db), _: str = 
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
 
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
     station_ids = [r[0] for r in db.query(Station.id).filter(Station.salle_id == salle_id).all()]
     if not station_ids:
         return RedirectResponse(url=f"/admin/salles/{salle_id}/stations", status_code=303)
@@ -2416,12 +2743,179 @@ def reset_salle_sessions(salle_id: int, db: Session = Depends(get_db), _: str = 
     return RedirectResponse(url=f"/admin/salles/{salle_id}/stations", status_code=303)
 
 
+def _get_role_ids(db: Session, role_keys: list[str]) -> dict[str, int]:
+    roles = db.query(Role).filter(Role.key.in_(role_keys)).all()
+    return {r.key: r.id for r in roles}
+
+
+def _find_or_create_user(db: Session, name: str, email: str | None, phone: str | None, password: str, is_active: bool) -> User:
+    email_v = email.strip() if email else None
+    phone_v = phone.strip() if phone else None
+    user = None
+    if phone_v:
+        user = db.query(User).filter(User.phone == phone_v).first()
+    if not user and email_v:
+        user = db.query(User).filter(User.email == email_v).first()
+
+    if user:
+        # On ne modifie pas le password si l'utilisateur existe (pour éviter de casser des identifiants).
+        # L'UI admin peut gérer explicitement si besoin plus tard.
+        return user
+
+    user = User(
+        name=name.strip(),
+        email=email_v,
+        phone=phone_v,
+        avatar=None,
+        password_hash=hash_password(password.strip()),
+        is_active=is_active,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@app.get("/admin/salles/{salle_id}/users", response_class=HTMLResponse)
+def admin_salle_users(salle_id: int, db: Session = Depends(get_db), _: str = Depends(require_admin)):
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin and salle_id not in get_salle_admin_salle_ids(db, user_id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    roles_wanted = ["manager", "responsable"]
+    role_ids = _get_role_ids(db, roles_wanted + (["salle_admin"] if super_admin else []))
+
+    salle = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not salle:
+        raise HTTPException(status_code=404, detail="Salle introuvable")
+
+    user_rows = (
+        db.query(User, Role.key)
+        .join(SalleUser, SalleUser.user_id == User.id)
+        .join(Role, Role.id == SalleUser.role_id)
+        .filter(SalleUser.salle_id == salle_id)
+        .filter(Role.key.in_(roles_wanted))
+        .all()
+    )
+
+    users_list_rows = "".join(
+        [
+            "<tr>"
+            f"<td>{u.id}</td>"
+            f"<td>{u.name}</td>"
+            f"<td>{u.email or ''}</td>"
+            f"<td>{u.phone or ''}</td>"
+            f"<td>{rk}</td>"
+            "</tr>"
+            for (u, rk) in user_rows
+        ]
+    )
+
+    manager_checkbox = "".join(
+        ["<label><input type='checkbox' name='make_manager' value='1'/> Gérant</label>"]
+    )
+    responsable_checkbox = "".join(
+        ["<label><input type='checkbox' name='make_responsable' value='1'/> Responsable</label>"]
+    )
+
+    salle_admin_checkbox = ""
+    if super_admin and "salle_admin" in role_ids:
+        salle_admin_checkbox = "<label><input type='checkbox' name='make_salle_admin' value='1'/> Salle admin</label><br/>"
+
+    return HTMLResponse(
+        f"<h1>Users - {salle.code} ({salle.name})</h1>"
+        "<h2>Gérants / Responsables</h2>"
+        "<table border='1'><tr><th>ID</th><th>Nom</th><th>Email</th><th>Phone</th><th>Rôle</th></tr>"
+        f"{users_list_rows}</table>"
+        "<h2>Créer un user</h2>"
+        "<form method='post' action='/admin/salles/{salle_id}/users'>"
+        "<input name='name' placeholder='Nom' required/>"
+        "<input name='email' placeholder='Email (optionnel)'/>"
+        "<input name='phone' placeholder='Téléphone (optionnel)'/>"
+        "<input name='password' placeholder='Mot de passe' type='password' required/>"
+        "<label><input type='checkbox' name='is_active' value='1' checked/> Actif</label><br/>"
+        f"{manager_checkbox}"
+        f"{responsable_checkbox}<br/>"
+        f"{salle_admin_checkbox}"
+        "<button type='submit'>Créer & assigner</button>"
+        "</form>"
+        "<p><a href='/admin/salles'>Retour</a></p>"
+    )
+
+
+@app.post("/admin/salles/{salle_id}/users")
+def admin_salle_users_post(
+    salle_id: int,
+    name: str = Form(...),
+    email: str = Form(""),
+    phone: str = Form(""),
+    password: str = Form(...),
+    is_active: str = Form("0"),
+    make_manager: str = Form("0"),
+    make_responsable: str = Form("0"),
+    make_salle_admin: str = Form("0"),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin),
+):
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin and salle_id not in get_salle_admin_salle_ids(db, user_id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    salle = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not salle:
+        raise HTTPException(status_code=404, detail="Salle introuvable")
+
+    roles_to_assign: list[str] = []
+    if make_manager == "1":
+        roles_to_assign.append("manager")
+    if make_responsable == "1":
+        roles_to_assign.append("responsable")
+    if super_admin and make_salle_admin == "1":
+        roles_to_assign.append("salle_admin")
+
+    if not roles_to_assign:
+        raise HTTPException(status_code=400, detail="Choisissez au moins un rôle")
+
+    role_ids = _get_role_ids(db, roles_to_assign)
+    missing = [rk for rk in roles_to_assign if rk not in role_ids]
+    if missing:
+        raise HTTPException(status_code=500, detail=f"Rôles manquants: {missing}")
+
+    user = _find_or_create_user(
+        db=db,
+        name=name,
+        email=email or None,
+        phone=phone or None,
+        password=password,
+        is_active=is_active == "1",
+    )
+
+    for rk in roles_to_assign:
+        rid = role_ids[rk]
+        exists = (
+            db.query(SalleUser)
+            .filter(SalleUser.salle_id == salle_id)
+            .filter(SalleUser.user_id == user.id)
+            .filter(SalleUser.role_id == rid)
+            .first()
+        )
+        if not exists:
+            db.add(SalleUser(salle_id=salle_id, user_id=user.id, role_id=rid))
+
+    db.commit()
+    return RedirectResponse(url=f"/admin/salles/{salle_id}/users", status_code=303)
+
+
 @app.post("/admin/salles")
 async def create_salle(
     request: Request,
     db: Session = Depends(get_db),
     _: str = Depends(require_admin),
 ):
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
     form = await request.form()
     code = (form.get("code") or "").strip()
     name = (form.get("name") or "").strip()
@@ -2437,6 +2931,22 @@ async def create_salle(
     raw_responsable_ids = form.getlist("responsable_user_ids")
     manager_ids = [int(x) for x in raw_manager_ids if str(x).isdigit()]
     responsable_ids = [int(x) for x in raw_responsable_ids if str(x).isdigit()]
+
+    # Pour coller au modèle "salle_admin crée des users via /admin/salles/{id}/users",
+    # on désactive l'assignation manager/responsable via ce formulaire pour les admins scoppés.
+    if not super_admin:
+        has_salle_admin = (
+            db.query(SalleUser)
+            .join(Role, Role.id == SalleUser.role_id)
+            .filter(SalleUser.user_id == user_id)
+            .filter(Role.key == "salle_admin")
+            .first()
+            is not None
+        )
+        if not has_salle_admin:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        manager_ids = []
+        responsable_ids = []
 
     exists = db.query(Salle).filter(Salle.code == code).first()
     if exists:
@@ -2466,6 +2976,10 @@ async def create_salle(
     db.add(salle)
     try:
         db.flush()
+        salle_admin_role = db.query(Role).filter(Role.key == "salle_admin").first()
+        # Le créateur non-super doit devenir `salle_admin` sur la salle créée.
+        if salle_admin_role and not super_admin:
+            db.add(SalleUser(salle_id=salle.id, user_id=user_id, role_id=salle_admin_role.id))
         for uid in manager_ids:
             db.add(SalleUser(salle_id=salle.id, user_id=uid, role_id=manager_role.id))
         for uid in responsable_ids:
@@ -2484,6 +2998,12 @@ def edit_salle(salle_id: int, db: Session = Depends(get_db), _: str = Depends(re
     salle = db.query(Salle).filter(Salle.id == salle_id).first()
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
+
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_salles = get_salle_admin_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
 
     manager_role = db.query(Role).filter(Role.key == "manager").first()
     responsable_role = db.query(Role).filter(Role.key == "responsable").first()
@@ -2544,6 +3064,8 @@ async def update_salle(
     _: str = Depends(require_admin),
 ):
     form = await request.form()
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
     code = (form.get("code") or "").strip()
     name = (form.get("name") or "").strip()
     if not code or not name:
@@ -2562,11 +3084,24 @@ async def update_salle(
     salle = db.query(Salle).filter(Salle.id == salle_id).first()
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
+
+    if not super_admin:
+        allowed_salles = get_salle_admin_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        manager_ids = []
+        responsable_ids = []
     salle.code = code
     salle.name = name
 
     salle.latitude = lat_v
     salle.longitude = lon_v
+
+    # Un admin scoppé ne doit pas modifier les gérants / responsables.
+    # Il gère ses rôles via `/admin/salles/{id}/users` et ses vues filtrées.
+    if not super_admin:
+        db.commit()
+        return RedirectResponse(url="/admin/salles", status_code=303)
 
     manager_role = db.query(Role).filter(Role.key == "manager").first()
     responsable_role = db.query(Role).filter(Role.key == "responsable").first()
@@ -2603,6 +3138,12 @@ def delete_salle(salle_id: int, db: Session = Depends(get_db), _: str = Depends(
     salle = db.query(Salle).filter(Salle.id == salle_id).first()
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
+
+    user_id = int(_)
+    if not is_global_super_admin(db, user_id):
+        allowed_salles = get_salle_admin_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
     used = db.query(Station).filter(Station.salle_id == salle_id).count()
     if used > 0:
         raise HTTPException(status_code=400, detail="Salle utilisée par des stations : suppression refusée")
@@ -2620,13 +3161,37 @@ def admin_salle_offers(salle_id: int, db: Session = Depends(get_db), _: str = De
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
 
-    offers = (
-        db.query(Offer)
-        .filter(Offer.provider == "paystack")
-        .filter(Offer.is_active.is_(True))
-        .order_by(Offer.duration_minutes.asc(), Offer.price_xof.asc(), Offer.id.asc())
-        .all()
-    )
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if super_admin:
+        offers = (
+            db.query(Offer)
+            .filter(Offer.is_active.is_(True))
+            .order_by(
+                Offer.duration_minutes.asc(),
+                Offer.price_xof.asc(),
+                Offer.id.asc(),
+            )
+            .all()
+        )
+    else:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        offers = []
+        if allowed_offer_ids:
+            offers = (
+                db.query(Offer)
+                .filter(Offer.id.in_(list(allowed_offer_ids)))
+                .filter(Offer.is_active.is_(True))
+                .order_by(
+                    Offer.duration_minutes.asc(),
+                    Offer.price_xof.asc(),
+                    Offer.id.asc(),
+                )
+                .all()
+            )
     attached_offer_ids = {
         so.offer_id
         for so in db.query(SalleOffer).filter(SalleOffer.salle_id == salle_id, SalleOffer.is_active.is_(True)).all()
@@ -2663,9 +3228,20 @@ async def admin_salle_offers_post(salle_id: int, request: Request, db: Session =
     if not salle:
         raise HTTPException(status_code=404, detail="Salle introuvable")
 
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
     form = await request.form()
     raw_ids = form.getlist("offer_ids")
     offer_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+
+    if not super_admin:
+        allowed_offer_ids = get_allowed_offer_ids_for_user(db, user_id)
+        offer_ids = [oid for oid in offer_ids if oid in allowed_offer_ids]
 
     active_ids = {
         o.id
@@ -2681,7 +3257,26 @@ async def admin_salle_offers_post(salle_id: int, request: Request, db: Session =
 
 @app.get("/admin/sessions", response_class=HTMLResponse)
 def admin_sessions(db: Session = Depends(get_db), _: str = Depends(require_admin)):
-    sessions = db.query(GameSession).order_by(GameSession.id.desc()).limit(100).all()
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if super_admin:
+        sessions = (
+            db.query(GameSession).order_by(GameSession.id.desc()).limit(100).all()
+        )
+    else:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not allowed_salles:
+            return HTMLResponse(
+                "<h1>Admin Sessions</h1><p>Aucune salle autorisée.</p><p><a href='/admin'>Retour</a></p>"
+            )
+        sessions = (
+            db.query(GameSession)
+            .join(Station, Station.id == GameSession.station_id)
+            .filter(Station.salle_id.in_(allowed_salles))
+            .order_by(GameSession.id.desc())
+            .limit(100)
+            .all()
+        )
     rows_parts = []
     for s in sessions:
         if s.status == "active":
@@ -2723,6 +3318,17 @@ def admin_extend_session(
     session = db.query(GameSession).filter(GameSession.id == session_id).first()
     if not session or session.status != "active":
         raise HTTPException(status_code=400, detail="Session non active")
+
+    user_id = int(_)
+    super_admin = is_global_super_admin(db, user_id)
+    if not super_admin:
+        allowed_salles = get_scoped_salle_ids(db, user_id)
+        if not session.station_id or session.station_id is None:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+        station = db.query(Station).filter(Station.id == session.station_id).first()
+        if not station or station.salle_id not in allowed_salles:
+            raise HTTPException(status_code=403, detail="Accès refusé")
+
     extend_session_end_at(db, session, minutes, source="admin")
     return RedirectResponse(url="/admin/sessions", status_code=303)
 
