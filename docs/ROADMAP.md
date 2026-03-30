@@ -1,99 +1,129 @@
-## Plan pour terminer le MVP
+# Roadmap ControlPlay
 
-### Phase 1 — Stabiliser le socle (terminé)
-
-- [x] Docker Compose avec `app`, `worker`, `db`, `redis`.
-- [x] FastAPI + Celery + PostgreSQL + Redis configurés.
-- [x] Modèles: `Station`, `Offer`, `GameSession`, `EventLog`.
-- [x] Admin HTML basique pour créer:
-  - [x] des offres (durée, prix, provider) en tant que templates
-  - [x] rattachement des templates via `station_offers` / `salle_offers` (configuration par station et par salle)
-  - [x] duplication / rattachement en masse des templates globales vers plusieurs stations d'une salle
-  - [x] des stations (code, IP Broadlink, codes IR).
-- [x] Génération de QR codes par station.
-- [x] Simulation de paiement avec redirection interne.
-- [x] Mode invité / connexion optionnelle au paiement (associe à `default_user`)
-- [x] UI client sans choix de provider (Paystack prioritaire, CinétPay en backup côté serveur).
-- [x] Tâches Celery pour activer et désactiver une session (en mode Broadlink dry-run).
-
-### Phase 2 — Finaliser le MVP fonctionnel (en cours)
-
-- [x] Ajouter des scripts de démarrage et de migration (commande unique pour init DB).
-- [ ] Affiner l’UI HTML (client + admin) pour une meilleure expérience en salle de jeux.
-- [ ] Tester le flux complet en local (sans Docker si nécessaire):
-  - [ ] Création d’une offre via `/admin/offers`.
-  - [ ] Scan QR → sélection offre → simulation paiement.
-  - [ ] Vérifier création session + déclenchement des tâches Celery.
-- [ ] Consolider les statuts de session (cas d’erreur paiement, annulation, etc.) (reste surtout côté PSP: reprises/idempotence “métier”).
-- [ ] Ajouter un minimum de logs lisibles (plutôt que uniquement `EventLog` brute).
-
-#### Livrables récents (mars 2026)
-
-- [x] Ajout de `.env.example` pour faciliter l'initialisation locale.
-- [x] Ajout d'un `Makefile` (`init-env`, `up`, `down`, `migrate`, `bootstrap`, `revision`).
-- [x] Intégration d'Alembic dans `app/` avec migration initiale (`0001_initial_schema`).
-- [x] Passage de `AUTO_CREATE_SCHEMA=false` par défaut (migrations d'abord).
-- [x] `docker-compose.yml` corrigé (chemins relatifs, ports configurables, commande worker Celery).
-- [x] Validation de démarrage complet en local (`make bootstrap`) et endpoint `/health`.
-
-### Phase 3 — Intégration réelle des paiements
-
-- [ ] Intégration **Paystack**:
-  - [x] Endpoint d'initialisation transaction (appel API Paystack).
-  - [x] Checkout Paystack tolérant email optionnel (placeholder) + référence sans `_`
-  - [x] Redirection vers la page de paiement Paystack.
-  - [x] Retour Paystack côté serveur (fallback automatique vers CinetPay si échec).
-  - [ ] Webhook Paystack complet:
-    - [x] Validation de signature `x-paystack-signature` (HMAC SHA512).
-    - [x] Vérification du statut transaction via API Paystack.
-    - [x] Gestion idempotence (garde-fous sur état de session + station).
-
-- [ ] Intégration **CinetPay**:
-  - [x] Appel API de création de paiement.
-  - [x] Gestion du retour / redirection.
-  - [ ] Webhook CinetPay:
-    - [x] Vérification `x-token` (HMAC SHA256).
-    - [x] Vérification de la transaction via `payment/check`.
-    - [x] Gestion idempotence (garde-fous sur état de session + station).
-
-### Phase 4 — Validation matérielle Broadlink
-
-- [ ] Détection et configuration du RM Mini 3 sur le réseau (IP fixe recommandée).
-- [ ] Script de "learn" des codes IR (HDMI1, HDMI2, Power).
-- [ ] Injection des codes IR dans:
-  - [ ] `.env` pour les valeurs par défaut, ou
-  - [ ] la configuration de chaque station via l'admin.
-- [ ] Passage de `BROADLINK_DRY_RUN=false` en environnement de test.
-- [ ] Batterie de tests:
-  - [ ] Bascule HDMI1 → HDMI2.
-  - [ ] Retour HDMI2 → HDMI1.
-  - [ ] Gestion des échecs (retries, logs clairs).
+Document de référence : **où en est le projet** et **par quoi enchaîner**. Dernière mise à jour : mars 2026.
 
 ---
 
-## Évolutions futures possibles
+## État actuel (résumé)
 
-### V1+ — Dashboard et supervision
+| Domaine | Statut |
+|--------|--------|
+| Socle Docker, FastAPI, Celery, Postgres, Redis, Alembic | OK |
+| Paiements Paystack / CinetPay (init, retours, webhooks avec vérifs) | OK (affiner cas limites en prod) |
+| Parcours client QR → `/s/{station}` → checkout | **SPA React** (données `GET /api/public/stations/{code}`) ; `POST /checkout` et `POST /extend/checkout` inchangés |
+| Admin opérationnel | **SPA React** (`/admin`, `/super-admin`) + **`/api`** + POST formulaires legacy pour partie CRUD |
+| Vitrine publique | **SPA** : `/`, `/location`, `/boutique`, `/carte`, `/jeux` + carte OSM si GPS salles |
+| Connexion | Un seul bouton **Se connecter** → `/login` (session cookie ; droits selon RBAC) |
+| Dev front | `make frontend-dev` → **:5173** (HMR) ; API proxifiée vers **:8000** |
+| Build prod / Docker volume | `make frontend-build` → `app/static/spa/` |
 
-- [ ] Dashboard temps réel pour l’admin (état de chaque station, temps restant, dernière erreur).
-- [ ] Filtrage des sessions par date, station, statut.
-- [ ] Export des sessions pour la comptabilité / statistique.
+---
 
-### V2 — Multi-sites et multi-projets
+## Phase 1 — Stabiliser le socle (**terminé**)
 
-- [ ] Gestion de plusieurs locaux / salles (champ `location` sur les stations).
-- [ ] Séparation des configurations Paystack / CinetPay par site.
-- [ ] Droits utilisateurs (admin global, manager de salle, opérateur).
+- [x] Docker Compose (`app`, `worker`, `db`, `redis`)
+- [x] Modèles `Station`, `Offer`, `GameSession`, `EventLog`, RBAC, salles, offres liées
+- [x] QR par station, simulation paiement, Celery activate/deactivate (Broadlink dry-run)
+- [x] Makefile, `.env.example`, migrations Alembic, `/health`
 
-### V3 — Durées et offres avancées
+---
 
-- [ ] Offres pack / abonnements.
-- [ ] Tarifs variables (heure creuse / pleine).
-- [ ] Codes promo ou tokens de jeu.
+## Phase 2 — MVP fonctionnel (**en cours**)
 
-### V4 — Intégrations externes
+- [x] Scripts de démarrage et migration (`make bootstrap`, `migrate`, …)
+- [x] **Admin & vitrine en SPA React** (liste / dashboard / navigation bootstrap, marketing location · boutique · carte · jeux)
+- [x] API JSON **`/api`** (auth, bootstrap, listes, options session manuelle, salles publiques + lat/lon)
+- [x] **Parcours client station** (`/s/{code}`) : **SPA** (vitrine) ; tunnel paiement toujours via `POST /checkout` et `POST /extend/checkout`. Détails : `docs/FLOW_TEMPS_DE_JEU.md`. Désactivation possible : `PUBLIC_STATION_SPA=0` (retour page HTML serveur legacy).
+- [ ] **Checklist QA manuelle** (à refaire après chaque grosse release) :
+  - [ ] Créer une offre (POST admin existant ou futur écran SPA complet)
+  - [ ] QR → choix offre → paiement simulé ou test PSP
+  - [ ] Session créée + tâche Celery (logs worker)
+- [ ] Consolider statuts session (annulation, timeouts, messages utilisateur)
+- [ ] Logs opérationnels lisibles (agrégation / niveaux, pas seulement `EventLog` brute)
 
-- [ ] Intégration `n8n` pour orchestrer des scénarios plus complexes.
-- [ ] Webhooks sortants vers d’autres systèmes (CRM, BI, etc.).
-- [ ] API publique documentée pour que d’autres apps pilotent les stations.
+---
 
+## Phase 2 bis — Vitrine & expérience marque (**terminé**)
+
+- [x] Identité visuelle (Syne / Outfit, thème sombre gaming / VR)
+- [x] Pages marketing et **une seule** entrée **Se connecter**
+- [x] Carte des salles (iframe OSM + liste) si coordonnées GPS renseignées
+
+---
+
+## Phase 3 — Paiements en production (**à consolider**)
+
+- [x] Init Paystack / CinetPay, retours, webhooks (signature + vérif API + idempotence)
+- [ ] Passes de recette **prod** (montants réels, relances webhook, rejouabilité)
+- [ ] Tableau de bord minimal des échecs / sessions bloquées « pending »
+
+---
+
+## Phase 4 — Matériel Broadlink (**à faire**)
+
+- [ ] IP fixe RM Mini 3, script d’apprentissage IR
+- [ ] Codes IR par station (ou défaut `.env`)
+- [ ] `BROADLINK_DRY_RUN=false` sur environnement pilote
+- [ ] Tests manuels HDMI1 ↔ HDMI2 + journalisation
+
+---
+
+## Plan pour la suite (**priorisé**)
+
+Ordre recommandé pour les prochaines itérations produit / tech :
+
+### P0 — Cohérence parcours utilisateur
+
+1. [x] **Aligner les pages HTML client** (`/s/{code}`, `/salle/…`) sur la charte sombre + polices Syne/Outfit (`controlplay.css` + `ui_theme.py` : fonts injectées pour `theme-public`).
+2. [x] **Tunnel checkout** : migration progressive vers React (optionnel) — les formulaires POST vers `/checkout` restent inchangés.
+3. [x] **Documenter le flux « temps de jeu »** avec schéma ou captures si besoin (`docs/FLOW_TEMPS_DE_JEU.md`).
+
+### P1 — Admin 100 % exploitable depuis la SPA
+
+3. [x] **Endpoints JSON** : stations (`/api/admin/stations`), offres templates (`/api/admin/offers`), salles (`/api/admin/salles`) + **offres rattachées à une salle** (`/api/admin/salles/{id}/offers`).
+4. [x] **Formulaires React** : édition SPA des salles (CRUD), stations (CRUD) et offres (templates).
+5. [x] Gestion des **offres par salle** : attacher/détacher depuis la SPA (`/admin/salles/:salleId/offers`).
+
+6. [x] Gestion des **users rattachés à une salle** (gérants / responsables) : attach/detach via (`/api/admin/salles/{id}/users`).
+7. [x] Page React dédiée : (`/admin/salles/:salleId/users`).
+
+8. [x] Gestion des **offres rattachées à une station** : attach/detach via (`/api/admin/stations/{id}/offers`).
+9. [x] Page React dédiée : (`/admin/stations/:stationId/offers`).
+
+### P2 — Données « jeu » et catalogue
+
+10. Modèle **`Game`** (ou équivalent) optionnel + liaison offre / station / tags.
+11. [x] **`GET /api/public/jeux`** (ou par salle) pour alimenter `/jeux` au lieu du contenu statique.
+
+### P3 — Boutique
+
+12. Modèles **produit / stock / commande** (ou intégration outil tiers).
+13. Parcours panier + paiement (réutiliser PSP ou tunnel dédié).
+
+### P4 — Compte joueur (optionnel)
+
+14. Auth **client** (téléphone / OTP ou email) si vous voulez historique, fidélité, réservations — **hors scope** du login admin actuel.
+
+### P5 — Qualité continue
+
+15. `npm run typecheck` dans CI (ou job parallèle léger).
+16. Étendre **Playwright** (parcours marketing + login admin + une station simulée si possible).
+17. OpenAPI **`/docs`** : documenter explicitement le préfixe **`/api`** pour intégrations externes.
+
+---
+
+## Évolutions plus lointaines (V1+)
+
+- Dashboard temps réel (WebSocket ou polling) — une partie est déjà dans `/api/admin/dashboard/summary`
+- Filtres / export sessions (compta, stats)
+- Multi-sites, PSP par site, RBAC affiné
+- Offres pack, heures creuses, promos
+- Webhooks sortants, n8n, API publique documentée
+
+---
+
+## Comment utiliser ce document
+
+- Cocher les cases au fil des merges.
+- Déplacer ou recréer une **issue / epic** par bloc **P0…P5** si vous utilisez un outil de suivi.
+- En fin de sprint : mettre à jour le **tableau « État actuel »** en haut.
