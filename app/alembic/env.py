@@ -28,6 +28,7 @@ from models import (  # noqa: F401,E402
     Permission,
     RolePermission,
     UserRole,
+    UserStaffPermission,
     SalleUser,
 )
 

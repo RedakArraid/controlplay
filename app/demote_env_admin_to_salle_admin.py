@@ -53,6 +53,12 @@ def main() -> int:
                     UserRole.user_id == user.id, UserRole.role_id == r.id
                 ).delete(synchronize_session=False)
 
+        # Retirer un éventuel `salle_admin` **global** (user_roles) : le cible est uniquement `salle_users`.
+        if salle_admin_r:
+            db.query(UserRole).filter(
+                UserRole.user_id == user.id, UserRole.role_id == salle_admin_r.id
+            ).delete(synchronize_session=False)
+
         db.query(SalleUser).filter(SalleUser.user_id == user.id).delete(
             synchronize_session=False
         )
@@ -80,7 +86,7 @@ def main() -> int:
         db.commit()
         print(
             f"OK — {ident} (id={user.id}) est maintenant salle_admin sur "
-            f"{len(salles)} salle(s), sans rôles globaux super_admin/admin."
+            f"{len(salles)} salle(s), sans rôles globaux super_admin/admin/salle_admin."
         )
         return 0
     except Exception as e:

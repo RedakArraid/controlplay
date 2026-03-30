@@ -36,6 +36,11 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Qui a créé le compte (admin de salle). NULL = super-admin / seed / import (visible par tous les admins de salle sur la salle).
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -86,6 +91,24 @@ class UserRole(Base):
     role = relationship("Role", back_populates="user_roles")
 
 
+class UserStaffPermission(Base):
+    """
+    Délégation super_admin → comptes équipe ControlPlay (rôle global `admin`).
+    Clés : `operations` (salles/stations/offres plateforme), `users` (comptes hors super_admin).
+    """
+
+    __tablename__ = "user_staff_permissions"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    permission_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    granted_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
 class SalleUser(Base):
     __tablename__ = "salle_users"
 
@@ -107,6 +130,9 @@ class Station(Base):
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     broadlink_ip: Mapped[str] = mapped_column(String(64), nullable=False)
+    tv_size_inches: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    console_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vr_headset_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ir_code_hdmi1: Mapped[str] = mapped_column(Text, nullable=True)
     ir_code_hdmi2: Mapped[str] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -218,3 +244,42 @@ class PaymentProviderConfig(Base):
     paystack_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     cinetpay_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RentalPlan(Base):
+    """
+    Forfait de location console / matériel — indépendant des `offers` (temps de jeu sur station).
+    """
+
+    __tablename__ = "rental_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_label: Mapped[str] = mapped_column(String(64), nullable=False)
+    price_xof: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="paystack")
+    station_id: Mapped[Optional[int]] = mapped_column(ForeignKey("stations.id"), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    station = relationship("Station")
+
+
+class RentalOrder(Base):
+    __tablename__ = "rental_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    rental_plan_id: Mapped[int] = mapped_column(ForeignKey("rental_plans.id"), nullable=False, index=True)
+    station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    payment_provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    payment_reference: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    payment_status: Mapped[str] = mapped_column(String(32), default="pending")
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    customer_email: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    customer_phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    plan = relationship("RentalPlan")
+    station = relationship("Station")
+    user = relationship("User")

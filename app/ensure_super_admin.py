@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Crée ou met à jour un utilisateur super administrateur global (rôles super_admin + admin legacy).
+Crée ou met à jour un utilisateur super administrateur global (rôle super_admin).
 
 Variables d'environnement :
   SUPER_ADMIN_EMAIL    (défaut: superadmin@controlplay.com)
@@ -17,10 +17,8 @@ from __future__ import annotations
 import os
 import sys
 
-import bcrypt
-
+from bootstrap_accounts import upsert_global_super_user
 from database import SessionLocal
-from models import Role, User, UserRole
 
 
 def main() -> int:
@@ -37,53 +35,15 @@ def main() -> int:
 
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == email).first()
-        pwd_hash = bcrypt.hashpw(
-            password.encode("utf-8"), bcrypt.gensalt(rounds=12)
-        ).decode()
-
-        if not user:
-            user = User(
-                name=name,
-                email=email,
-                phone=None,
-                avatar=None,
-                password_hash=pwd_hash,
-                is_active=True,
-            )
-            db.add(user)
-            db.flush()
-            created = True
-        else:
-            user.name = name
-            user.password_hash = pwd_hash
-            user.is_active = True
-            db.flush()
-            created = False
-
-        super_r = db.query(Role).filter(Role.key == "super_admin").first()
-        legacy_r = db.query(Role).filter(Role.key == "admin").first()
-        if not super_r:
-            print("Rôle super_admin introuvable. Lance les migrations / seed.", file=sys.stderr)
-            return 1
-
-        for role in (super_r, legacy_r):
-            if not role:
-                continue
-            exists = (
-                db.query(UserRole)
-                .filter(
-                    UserRole.user_id == user.id,
-                    UserRole.role_id == role.id,
-                )
-                .first()
-            )
-            if not exists:
-                db.add(UserRole(user_id=user.id, role_id=role.id))
-
+        created, user = upsert_global_super_user(
+            db,
+            email=email,
+            password=password,
+            display_name=name,
+        )
         db.commit()
         action = "Créé" if created else "Mis à jour"
-        print(f"{action} — {email} (id={user.id}) avec rôles super_admin" + (" + admin" if legacy_r else ""))
+        print(f"{action} — {user.email} (id={user.id}) avec rôle super_admin")
         return 0
     except Exception as e:
         db.rollback()

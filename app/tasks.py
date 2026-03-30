@@ -24,7 +24,7 @@ def activate_session(session_id: int) -> None:
                 and_(
                     GameSession.station_id == session.station_id,
                     GameSession.id != session.id,
-                    GameSession.status == "active",
+                    GameSession.status.in_(("active", "paused")),
                 )
             )
             .first()
