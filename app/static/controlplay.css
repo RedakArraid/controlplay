@@ -1,0 +1,644 @@
+/* ControlPlay — thèmes UI simples
+ * Super admin : bleus clairs
+ * Admin / public : orange clair + sarcelle (teal)
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  line-height: 1.5;
+  color: var(--cp-text);
+  background: var(--cp-bg);
+  background-image: var(--cp-bg-gradient);
+}
+
+/* ——— Thème super admin (bleu clair) ——— */
+body.theme-super-admin {
+  --cp-text: #0c4a6e;
+  --cp-muted: #0369a1;
+  --cp-bg: #e0f2fe;
+  --cp-bg-gradient: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 40%, #bae6fd 100%);
+  --cp-card: #ffffff;
+  --cp-card-border: rgba(14, 165, 233, 0.22);
+  --cp-nav-bg: rgba(255, 255, 255, 0.75);
+  --cp-nav-border: rgba(14, 165, 233, 0.35);
+  --cp-accent: #0284c7;
+  --cp-accent-hover: #0369a1;
+  --cp-accent-soft: #e0f2fe;
+  --cp-btn-text: #ffffff;
+  --cp-link: #0369a1;
+  --cp-table-head: #bae6fd;
+  --cp-table-stripe: rgba(240, 249, 255, 0.85);
+  --cp-shadow: 0 4px 24px rgba(3, 105, 161, 0.12);
+}
+
+/* ——— Thème admin (orange + sarcelle / teal) ——— */
+body.theme-admin {
+  --cp-text: #431407;
+  --cp-muted: #9a3412;
+  --cp-bg: #fff7ed;
+  --cp-bg-gradient: linear-gradient(165deg, #fffbeb 0%, #ffedd5 35%, #ccfbf1 100%);
+  --cp-card: #ffffff;
+  --cp-card-border: rgba(251, 146, 60, 0.25);
+  --cp-nav-bg: rgba(255, 255, 255, 0.82);
+  --cp-nav-border: rgba(251, 146, 60, 0.35);
+  --cp-accent: #ea580c;
+  --cp-accent-hover: #c2410c;
+  --cp-accent-soft: #ffedd5;
+  --cp-secondary: #0d9488;
+  --cp-secondary-soft: #ccfbf1;
+  --cp-btn-text: #ffffff;
+  --cp-link: #c2410c;
+  --cp-link-alt: #0f766e;
+  --cp-table-head: #ffedd5;
+  --cp-table-stripe: rgba(255, 247, 237, 0.9);
+  --cp-shadow: 0 4px 24px rgba(234, 88, 12, 0.1);
+}
+
+/* ——— Public client (aligné SPA marketing : sombre, Syne/Outfit via ui_theme) ——— */
+body.theme-public {
+  --cp-text: #f4f4f5;
+  --cp-muted: #a1a1aa;
+  --cp-bg: #0c0a12;
+  --cp-bg-gradient:
+    radial-gradient(ellipse 100% 80% at 50% -30%, rgba(168, 85, 247, 0.22), transparent 55%),
+    linear-gradient(180deg, #0c0a12 0%, #08060c 100%);
+  --cp-card: rgba(24, 20, 31, 0.92);
+  --cp-card-border: rgba(167, 139, 250, 0.22);
+  --cp-input-bg: #18141f;
+  --cp-nav-bg: rgba(24, 20, 31, 0.85);
+  --cp-nav-border: rgba(167, 139, 250, 0.25);
+  --cp-accent: #c084fc;
+  --cp-accent-hover: #e879f9;
+  --cp-accent-soft: rgba(168, 85, 247, 0.15);
+  --cp-secondary: #22d3ee;
+  --cp-secondary-soft: rgba(34, 211, 238, 0.12);
+  --cp-btn-text: #ffffff;
+  --cp-link: #67e8f9;
+  --cp-link-alt: #c084fc;
+  --cp-table-head: #27272f;
+  --cp-table-stripe: rgba(39, 39, 47, 0.6);
+  --cp-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  font-family:
+    "Outfit",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+
+body.theme-public h1,
+body.theme-public h2.cp-section-title,
+body.theme-public .cp-offer-title {
+  font-family:
+    "Syne",
+    "Outfit",
+    ui-sans-serif,
+    sans-serif;
+}
+
+body.theme-public .cp-wrap {
+  max-width: 720px;
+  padding-top: 0;
+}
+
+body.theme-public input[type="text"],
+body.theme-public input[type="password"],
+body.theme-public input[type="email"],
+body.theme-public input[type="tel"],
+body.theme-public select,
+body.theme-public textarea {
+  background: var(--cp-input-bg);
+  color: var(--cp-text);
+  border-color: var(--cp-card-border);
+}
+
+body.theme-public input:focus,
+body.theme-public select:focus {
+  border-color: var(--cp-accent);
+  box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.25);
+}
+
+body.theme-public a:hover {
+  color: var(--cp-accent-hover);
+}
+
+/* Barre + page station / salle */
+.cp-client-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0 1.25rem;
+  margin: 0 0 0.5rem;
+  border-bottom: 1px solid var(--cp-card-border);
+}
+
+.cp-client-logo {
+  font-family: "Syne", "Outfit", sans-serif;
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+  background: linear-gradient(105deg, #67e8f9, #c084fc, #fbbf24);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.cp-client-logo:hover {
+  filter: brightness(1.1);
+}
+
+.cp-client-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent);
+}
+
+.cp-client-main {
+  padding-bottom: 2rem;
+}
+
+.cp-client-lead {
+  color: var(--cp-muted);
+  font-size: 1rem;
+  margin: 0 0 1.5rem;
+  line-height: 1.5;
+}
+
+.cp-station-meta {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--cp-card-border);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.12);
+  box-shadow: var(--cp-shadow);
+  margin: 0 0 1.5rem;
+}
+
+.cp-composition-grid {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cp-composition-pill {
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--cp-card-border);
+  background: rgba(34, 211, 238, 0.06);
+  color: var(--cp-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cp-section-title {
+  font-size: 1.15rem;
+  margin: 2rem 0 1rem;
+  color: var(--cp-text);
+}
+
+.cp-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cp-offer-card {
+  background: var(--cp-card);
+  border: 1px solid var(--cp-card-border);
+  border-radius: 16px;
+  padding: 1.25rem 1.35rem;
+  box-shadow: var(--cp-shadow);
+}
+
+.cp-offer-meta {
+  margin-bottom: 1rem;
+}
+
+.cp-offer-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  color: var(--cp-text);
+}
+
+.cp-offer-price {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--cp-muted);
+}
+
+.cp-offer-price strong {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+.cp-offer-form .cp-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.cp-offer-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--cp-muted);
+}
+
+.cp-form-connect {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+
+.cp-form-connect input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.cp-client-links,
+.cp-client-footer-links {
+  margin-top: 1.75rem;
+  font-size: 0.9rem;
+}
+
+.cp-client-links a,
+.cp-client-footer-links a {
+  color: var(--cp-link);
+  font-weight: 500;
+}
+
+.cp-station-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.cp-station-list li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--cp-card-border);
+}
+
+.cp-station-list li:last-child {
+  border-bottom: none;
+}
+
+.cp-offers--extend {
+  margin-top: 0.5rem;
+}
+
+.cp-offers--extend .cp-offer-card {
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+.cp-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 2.5rem;
+}
+
+.cp-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  background: var(--cp-nav-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--cp-nav-border);
+  border-radius: 12px;
+  box-shadow: var(--cp-shadow);
+  font-size: 0.9375rem;
+}
+
+.cp-nav strong {
+  color: var(--cp-accent);
+  font-weight: 700;
+}
+
+.cp-nav a {
+  color: var(--cp-link);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.cp-nav a:hover {
+  text-decoration: underline;
+  color: var(--cp-accent-hover);
+}
+
+body.theme-admin .cp-nav strong,
+body.theme-public .cp-nav strong {
+  color: var(--cp-accent);
+}
+
+.cp-nav span.sep {
+  color: var(--cp-muted);
+  user-select: none;
+}
+
+.cp-card {
+  background: var(--cp-card);
+  border: 1px solid var(--cp-card-border);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--cp-shadow);
+  margin-bottom: 1rem;
+}
+
+h1 {
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.75rem;
+  color: var(--cp-text);
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.65rem;
+  color: var(--cp-text);
+}
+
+h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+  color: var(--cp-muted);
+}
+
+p {
+  margin: 0.5rem 0;
+}
+
+a {
+  color: var(--cp-link);
+}
+
+body.theme-admin a:hover,
+body.theme-public a:hover {
+  color: var(--cp-accent-hover);
+}
+
+.cp-muted {
+  color: var(--cp-muted);
+  font-size: 0.9rem;
+}
+
+.cp-pill {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-hover);
+}
+
+body.theme-super-admin .cp-pill {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 1rem 0;
+  background: var(--cp-card);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--cp-card-border);
+}
+
+table th,
+table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--cp-card-border);
+}
+
+table th {
+  background: var(--cp-table-head);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cp-muted);
+}
+
+table tr:nth-child(even) {
+  background: var(--cp-table-stripe);
+}
+
+table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Forms */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="tel"],
+select,
+textarea {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--cp-card-border);
+  background: #fff;
+  color: var(--cp-text);
+  margin: 0.15rem 0.25rem 0.35rem 0;
+  max-width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--cp-accent);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+body.theme-admin input:focus,
+body.theme-public input:focus,
+body.theme-admin select:focus,
+body.theme-public select:focus {
+  border-color: var(--cp-accent);
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+}
+
+label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--cp-muted);
+  margin-right: 0.35rem;
+}
+
+button,
+input[type="submit"],
+.cp-btn {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9px;
+  border: none;
+  background: linear-gradient(180deg, var(--cp-accent) 0%, var(--cp-accent-hover) 100%);
+  color: var(--cp-btn-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 0.15rem 0.25rem 0.15rem 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+button:hover,
+input[type="submit"]:hover,
+.cp-btn:hover {
+  filter: brightness(1.05);
+}
+
+button:active,
+input[type="submit"]:active {
+  transform: translateY(1px);
+}
+
+body.theme-admin button.secondary,
+body.theme-public button.secondary {
+  background: linear-gradient(180deg, var(--cp-secondary) 0%, #0f766e 100%);
+}
+
+ul {
+  padding-left: 1.25rem;
+}
+
+li {
+  margin: 0.35rem 0;
+}
+
+.cp-alert {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  margin: 0.75rem 0;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(254, 226, 226, 0.6);
+  color: #991b1b;
+  font-size: 0.9rem;
+}
+
+/* Login (thème admin, carte centrée) */
+body.theme-login {
+  --cp-text: #431407;
+  --cp-muted: #9a3412;
+  --cp-bg: #fff7ed;
+  --cp-bg-gradient: linear-gradient(145deg, #fffbeb 0%, #ffedd5 45%, #ccfbf1 100%);
+  --cp-accent: #ea580c;
+  --cp-accent-hover: #c2410c;
+  --cp-card-border: rgba(251, 146, 60, 0.22);
+}
+
+body.theme-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.cp-login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--cp-card-border);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 20px 40px -12px rgba(234, 88, 12, 0.18);
+}
+
+.cp-login-card h1 {
+  text-align: center;
+  font-size: 1.4rem;
+  background: linear-gradient(135deg, #ea580c 0%, #0d9488 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cp-login-card .subtitle {
+  text-align: center;
+  color: var(--cp-muted);
+  font-size: 0.875rem;
+  margin: 0.35rem 0 1.5rem;
+}
+
+.cp-login-card label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.cp-login-card input[type="text"],
+.cp-login-card input[type="password"] {
+  width: 100%;
+  margin-bottom: 0.85rem;
+}
+
+.cp-login-card button[type="submit"] {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.cp-login-footer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.cp-login-footer a {
+  color: #0d9488;
+  font-weight: 600;
+}
+
+code {
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--cp-accent-soft);
+}
+
+body.theme-super-admin code {
+  background: #e0f2fe;
+}

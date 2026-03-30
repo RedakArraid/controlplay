@@ -1,5 +1,6 @@
 services:
   app:
+    # L’image inclut le build Vite ; le volume ./app:/app le remplace en dev — exécuter « make frontend-build » sur l’hôte.
     build:
       context: .
       dockerfile: app/Dockerfile
