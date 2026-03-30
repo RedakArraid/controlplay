@@ -1,0 +1,3 @@
+# Tests navigateur (Playwright). Installer les binaires : playwright install chromium
+-r requirements.txt
+playwright==1.49.1
