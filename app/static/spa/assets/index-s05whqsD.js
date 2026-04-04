@@ -15204,26 +15204,53 @@ function HomePage() {
 //#region src/pages/marketing/LocationPage.tsx
 function LocationPage() {
 	const [data, setData] = (0, import_react.useState)(null);
+	const [rental, setRental] = (0, import_react.useState)(null);
 	const [err, setErr] = (0, import_react.useState)(null);
 	(0, import_react.useEffect)(() => {
-		apiGet("/public/stations").then(setData).catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
+		Promise.all([apiGet("/public/stations"), apiGet("/public/rental-consoles")]).then(([partnerRes, rentalRes]) => {
+			setData(partnerRes);
+			setRental(rentalRes);
+		}).catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
 	}, []);
-	const consoleModels = (0, import_react.useMemo)(() => {
+	const rentalConsoles = (0, import_react.useMemo)(() => rental?.consoles ?? [], [rental]);
+	const gameStations = (0, import_react.useMemo)(() => data?.stations ?? [], [data]);
+	const consoleModels = (list) => {
 		const m = /* @__PURE__ */ new Map();
-		for (const st of data?.stations ?? []) {
+		for (const st of list) {
 			if (!st.console_model) continue;
 			m.set(st.console_model, (m.get(st.console_model) ?? 0) + 1);
 		}
 		return [...m.entries()].sort((a, b) => b[1] - a[1]);
-	}, [data]);
-	const vrModels = (0, import_react.useMemo)(() => {
+	};
+	const vrModels = (list) => {
 		const m = /* @__PURE__ */ new Map();
-		for (const st of data?.stations ?? []) {
-			if (!st.vr_headset_model) continue;
-			m.set(st.vr_headset_model, (m.get(st.vr_headset_model) ?? 0) + 1);
+		for (const st of list) {
+			const vr = st.vr_headset_model;
+			if (!vr) continue;
+			m.set(vr, (m.get(vr) ?? 0) + 1);
 		}
 		return [...m.entries()].sort((a, b) => b[1] - a[1]);
-	}, [data]);
+	};
+	const consoleRental = (0, import_react.useMemo)(() => consoleModels(rentalConsoles), [rentalConsoles]);
+	const consolePartner = (0, import_react.useMemo)(() => consoleModels(gameStations), [gameStations]);
+	const vrPartner = (0, import_react.useMemo)(() => vrModels(gameStations), [gameStations]);
+	const ModelCard = ({ model, count, variant }) => {
+		const modelLower = model.toLowerCase();
+		const Icon = modelLower.includes("playstation") ? Disc : modelLower.includes("switch") ? Cpu : MonitorPlay;
+		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+			className: variant === "rental" ? "flex gap-4 border-cp-accent/20 p-6" : "flex gap-4 p-6",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: variant === "rental" ? "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cp-accent/15 text-cp-accent" : "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cp-cyan/15 text-cp-cyan",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { className: "h-6 w-6" })
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+				className: "font-display text-lg font-semibold",
+				children: model
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "mt-2 text-sm text-cp-muted",
+				children: [count, " poste(s)."]
+			})] })]
+		}, model);
+	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-16",
 		children: [
@@ -15238,122 +15265,254 @@ function LocationPage() {
 					children: "casques VR"
 				})]
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "mt-4 max-w-2xl text-lg text-cp-muted",
-				children: "Louez des postes dans un même lieu : chaque station déclare sa composition (TV + console/VR) et indique les jeux disponibles pour la session."
+				children: [
+					"Nous distinguons le ",
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "parc location ControlPlay" }),
+					" (matériel loué, forfaits dédiés) des ",
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "postes en salles partenaires" }),
+					" (achat de temps de jeu sur place via QR)."
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+				className: "mt-8 border-cp-accent/25 bg-cp-accent/5 p-6",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+						className: "font-display text-lg font-semibold text-cp-text",
+						children: "Réserver un forfait location"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mt-2 max-w-xl text-sm text-cp-muted",
+						children: "Tarifs et durées des forfaits « location console » — paiement en ligne selon la configuration PSP."
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+						href: "/rental",
+						className: "mt-4 inline-flex items-center gap-2 rounded-xl bg-cp-accent px-4 py-2.5 text-sm font-semibold text-cp-bg shadow-lg shadow-cp-accent/20 transition hover:opacity-90",
+						children: "Voir les forfaits & payer"
+					})
+				]
 			}),
 			err ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-6 text-rose-300",
 				children: err
 			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-				className: "font-display mt-16 text-2xl font-bold",
-				children: "Familles de consoles"
+				className: "font-display mt-16 text-2xl font-bold text-cp-accent",
+				children: "Parc location ControlPlay"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "mt-2 max-w-2xl text-sm text-cp-muted",
+				children: "Postes déclarés comme « location » dans l’admin : TV, console, manettes, jeux décrits sur le matériel (sans lien obligatoire avec les offres temps de jeu des salles partenaires)."
 			}),
 			!data ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-8 text-cp-muted",
 				children: "Chargement…"
-			}) : consoleModels.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			}) : rentalConsoles.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-8 text-cp-muted",
-				children: "Aucune console déclarée (admin : stations)."
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "mt-8 grid gap-4 md:grid-cols-2",
-				children: consoleModels.map(([model, count]) => {
-					const modelLower = model.toLowerCase();
-					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
-						className: "flex gap-4 p-6",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cp-cyan/15 text-cp-cyan",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(modelLower.includes("playstation") ? Disc : modelLower.includes("switch") ? Cpu : MonitorPlay, { className: "h-6 w-6" })
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-							className: "font-display text-lg font-semibold",
+				children: "Aucun poste location publié pour le moment (admin : stations, type « location ControlPlay »)."
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "font-display mt-10 text-lg font-semibold",
+					children: "Familles de consoles (location)"
+				}),
+				consoleRental.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-4 text-cp-muted",
+					children: "Aucun modèle de console renseigné."
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-4 grid gap-4 md:grid-cols-2",
+					children: consoleRental.map(([model, count]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ModelCard, {
+						model,
+						count,
+						variant: "rental"
+					}, model))
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "font-display mt-10 text-lg font-semibold",
+					children: "Détail des postes"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3",
+					children: rentalConsoles.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+						className: "border-cp-accent/15 p-6",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs font-semibold uppercase tracking-[0.2em] text-cp-accent",
+								children: "Location"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs font-mono text-cp-muted",
+								children: st.code
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", {
+								className: "font-display mt-2 text-lg font-semibold",
+								children: st.name
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "mt-3 flex flex-wrap gap-2",
+								children: [
+									st.tv_size_inches != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
+										children: [
+											"TV ",
+											st.tv_size_inches,
+											"\""
+										]
+									}) : null,
+									st.console_model ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
+										children: st.console_model
+									}) : null,
+									st.controller_count != null && st.controller_count > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
+										children: [st.controller_count, " manette(s)"]
+									}) : null
+								]
+							}),
+							st.notes ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "mt-4",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "text-xs font-semibold uppercase tracking-wider text-cp-muted",
+									children: "Notes matériel"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "mt-2 whitespace-pre-wrap text-sm text-cp-muted",
+									children: st.notes
+								})]
+							}) : null,
+							st.games && st.games.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "mt-3",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "text-xs font-semibold uppercase tracking-wider text-cp-muted",
+									children: "Jeux déclarés"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+									className: "mt-1 list-disc pl-4 text-xs text-cp-muted",
+									children: st.games.slice(0, 6).map((g) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: g.platform ? `${g.name} (${g.platform})` : g.name }, g.id))
+								})]
+							}) : null
+						]
+					}, st.id))
+				})
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				className: "font-display mt-20 text-2xl font-bold text-cp-cyan",
+				children: "Salles partenaires — temps de jeu"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "mt-2 max-w-2xl text-sm text-cp-muted",
+				children: [
+					"Ces postes ne sont pas tous gérés comme le parc ControlPlay : les offres (durée / prix) sont celles de la salle. Achat sur place via QR ",
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", {
+						className: "text-cp-accent",
+						children: "/s/…"
+					}),
+					"."
+				]
+			}),
+			!data ? null : gameStations.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "mt-8 text-cp-muted",
+				children: "Aucune station « salle de jeu » publiée."
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "font-display mt-10 text-lg font-semibold",
+					children: "Familles de consoles (partenaires)"
+				}),
+				consolePartner.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-4 text-cp-muted",
+					children: "Aucun modèle renseigné."
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-4 grid gap-4 md:grid-cols-2",
+					children: consolePartner.map(([model, count]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ModelCard, {
+						model,
+						count,
+						variant: "partner"
+					}, model))
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", {
+					className: "font-display mt-10 flex items-center gap-2 text-lg font-semibold",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Glasses, { className: "h-6 w-6 text-cp-vr" }), "VR (partenaires)"]
+				}),
+				vrPartner.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-4 text-cp-muted",
+					children: "Aucun casque VR déclaré."
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-4 grid gap-4 md:grid-cols-2",
+					children: vrPartner.map(([model, count]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+						className: "border-cp-vr/20 p-6",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", {
+							className: "font-display font-semibold text-cp-vr",
 							children: model
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 							className: "mt-2 text-sm text-cp-muted",
-							children: [count, " station(s) équipée(s)."]
-						})] })]
-					}, model);
+							children: [count, " station(s)."]
+						})]
+					}, model))
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+					className: "font-display mt-10 text-lg font-semibold",
+					children: "Stations & offres temps de jeu"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3",
+					children: gameStations.slice(0, 12).map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+						className: "p-6",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs font-semibold uppercase tracking-[0.2em] text-cp-muted",
+								children: "Partenaire"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs font-mono text-cp-muted",
+								children: st.code
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", {
+								className: "font-display mt-2 text-lg font-semibold",
+								children: st.name
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "mt-3 flex flex-wrap gap-2",
+								children: [
+									st.tv_size_inches != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
+										children: [
+											"TV ",
+											st.tv_size_inches,
+											" pouces"
+										]
+									}) : null,
+									st.console_model ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
+										children: st.console_model
+									}) : null,
+									st.vr_headset_model ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "rounded-full border border-cp-vr/30 bg-cp-vr/10 px-3 py-1 text-xs text-cp-muted",
+										children: ["VR ", st.vr_headset_model]
+									}) : null
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "mt-4",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "text-xs font-semibold uppercase tracking-[0.15em] text-cp-muted",
+									children: "Offres (temps de jeu)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ul", {
+									className: "mt-2 list-disc pl-5 text-sm text-cp-muted",
+									children: [st.games.slice(0, 4).map((g) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+										g.name,
+										" (",
+										g.duration_minutes,
+										" min)"
+									] }, g.id)), st.games.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: "Aucune offre active" }) : null]
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
+								to: `/s/${encodeURIComponent(st.code)}`,
+								className: "mt-4 inline-block text-sm font-medium text-cp-teal hover:underline",
+								children: "Ouvrir la page station (QR) →"
+							})
+						]
+					}, st.id))
 				})
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
-				className: "font-display mt-16 flex items-center gap-2 text-2xl font-bold",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Glasses, { className: "h-8 w-8 text-cp-vr" }), "Réalité virtuelle"]
-			}),
-			!data ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "mt-6 text-cp-muted",
-				children: "Chargement…"
-			}) : vrModels.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "mt-6 text-cp-muted",
-				children: "Aucun casque VR déclaré pour le moment."
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "mt-6 grid gap-4 md:grid-cols-2",
-				children: vrModels.map(([model, count]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
-					className: "border-cp-vr/20 p-6",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-						className: "font-display font-semibold text-cp-vr",
-						children: model
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "mt-2 text-sm text-cp-muted",
-						children: [count, " station(s)."]
-					})]
-				}, model))
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-				className: "font-display mt-16 text-2xl font-bold",
-				children: "Stations & jeux disponibles"
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3",
-				children: (data?.stations ?? []).slice(0, 9).map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
-					className: "p-6",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-							className: "text-xs font-semibold uppercase tracking-[0.2em] text-cp-muted",
-							children: st.code
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-							className: "font-display mt-2 text-lg font-semibold",
-							children: st.name
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "mt-3 flex flex-wrap gap-2",
-							children: [
-								st.tv_size_inches != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
-									children: [
-										"TV ",
-										st.tv_size_inches,
-										" pouces"
-									]
-								}) : null,
-								st.console_model ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "rounded-full border border-cp-border bg-cp-bg/60 px-3 py-1 text-xs text-cp-muted",
-									children: st.console_model
-								}) : null,
-								st.vr_headset_model ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "rounded-full border border-cp-vr/30 bg-cp-vr/10 px-3 py-1 text-xs text-cp-muted",
-									children: ["VR ", st.vr_headset_model]
-								}) : null
-							]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "mt-4",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-								className: "text-xs font-semibold uppercase tracking-[0.15em] text-cp-muted",
-								children: "Jeux"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ul", {
-								className: "mt-2 list-disc pl-5 text-sm text-cp-muted",
-								children: [st.games.slice(0, 4).map((g) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
-									g.name,
-									" (",
-									g.duration_minutes,
-									" min)"
-								] }, g.id)), st.games.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: "Aucun jeu actif" }) : null]
-							})]
-						})
-					]
-				}, st.id))
-			})
+			] })
 		]
 	});
 }
@@ -15669,6 +15828,15 @@ function StationCheckoutPage() {
 		phone: "",
 		connect: false
 	});
+	const [feedbackForm, setFeedbackForm] = (0, import_react.useState)({
+		rating: 5,
+		category: "general",
+		comment: "",
+		contact_email: "",
+		contact_phone: ""
+	});
+	const [feedbackDone, setFeedbackDone] = (0, import_react.useState)(false);
+	const [feedbackSaving, setFeedbackSaving] = (0, import_react.useState)(false);
 	(0, import_react.useEffect)(() => {
 		let cancelled = false;
 		apiGet(`/public/stations/${encodeURIComponent(stationCode)}`).then((res) => {
@@ -15697,6 +15865,33 @@ function StationCheckoutPage() {
 		} catch (e) {
 			setErr(e instanceof Error ? e.message : "Erreur checkout");
 			setSavingOfferId(null);
+		}
+	};
+	const submitFeedback = async (ev) => {
+		ev.preventDefault();
+		try {
+			setFeedbackSaving(true);
+			setErr(null);
+			await apiPostJson("/public/feedback", {
+				station_code: stationCode,
+				rating: feedbackForm.rating,
+				category: feedbackForm.category,
+				comment: feedbackForm.comment || null,
+				contact_email: feedbackForm.contact_email || null,
+				contact_phone: feedbackForm.contact_phone || null
+			});
+			setFeedbackDone(true);
+			setFeedbackForm({
+				rating: 5,
+				category: "general",
+				comment: "",
+				contact_email: "",
+				contact_phone: ""
+			});
+		} catch (e) {
+			setErr(e instanceof Error ? e.message : "Erreur feedback");
+		} finally {
+			setFeedbackSaving(false);
 		}
 	};
 	if (err && !data) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
@@ -15858,7 +16053,127 @@ function StationCheckoutPage() {
 						})
 					] }, `ext-${offer.id}`))
 				})]
-			}) : null
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+				className: "mt-8",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+						className: "mb-2 font-semibold",
+						children: "Votre feedback"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mb-3 text-sm text-cp-muted",
+						children: "Dites-nous ce qui s’est bien passé ou ce qu’on doit améliorer."
+					}),
+					feedbackDone ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mb-3 text-emerald-300",
+						children: "Merci, votre avis est enregistré."
+					}) : null,
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+						onSubmit: submitFeedback,
+						className: "grid gap-3 md:grid-cols-2",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+								value: String(feedbackForm.rating),
+								onChange: (e) => setFeedbackForm((f) => ({
+									...f,
+									rating: Number(e.target.value)
+								})),
+								className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "5",
+										children: "5 - Excellent"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "4",
+										children: "4 - Bien"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "3",
+										children: "3 - Moyen"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "2",
+										children: "2 - Décevant"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "1",
+										children: "1 - Mauvais"
+									})
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+								value: feedbackForm.category,
+								onChange: (e) => setFeedbackForm((f) => ({
+									...f,
+									category: e.target.value
+								})),
+								className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "general",
+										children: "Général"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "experience",
+										children: "Expérience de jeu"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "paiement",
+										children: "Paiement"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "materiel",
+										children: "Matériel"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+										value: "support",
+										children: "Support"
+									})
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
+								value: feedbackForm.comment,
+								onChange: (e) => setFeedbackForm((f) => ({
+									...f,
+									comment: e.target.value
+								})),
+								className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm md:col-span-2",
+								rows: 3,
+								placeholder: "Votre message (optionnel)"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "email",
+								value: feedbackForm.contact_email,
+								onChange: (e) => setFeedbackForm((f) => ({
+									...f,
+									contact_email: e.target.value
+								})),
+								className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+								placeholder: "Email de contact (optionnel)"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: feedbackForm.contact_phone,
+								onChange: (e) => setFeedbackForm((f) => ({
+									...f,
+									contact_phone: e.target.value
+								})),
+								className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+								placeholder: "Téléphone de contact (optionnel)"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "md:col-span-2",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+									type: "submit",
+									disabled: feedbackSaving,
+									children: feedbackSaving ? "Envoi…" : "Envoyer mon avis"
+								})
+							})
+						]
+					})
+				]
+			})
 		]
 	});
 }
@@ -15941,9 +16256,11 @@ function Login() {
 						className: "space-y-5",
 						children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								htmlFor: "login-identifier",
 								className: "mb-1.5 block text-xs font-medium uppercase tracking-wider text-cp-muted",
 								children: "Email ou téléphone"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								id: "login-identifier",
 								name: "identifier",
 								autoComplete: "username",
 								value: identifier,
@@ -15952,9 +16269,11 @@ function Login() {
 								required: true
 							})] }),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								htmlFor: "login-password",
 								className: "mb-1.5 block text-xs font-medium uppercase tracking-wider text-cp-muted",
 								children: "Mot de passe"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								id: "login-password",
 								name: "password",
 								type: "password",
 								autoComplete: "current-password",
@@ -16156,7 +16475,7 @@ function Salles() {
 		longitude: ""
 	});
 	const [editForm, setEditForm] = (0, import_react.useState)({});
-	async function reload() {
+	const reload = (0, import_react.useCallback)(async () => {
 		const d = await apiGet("/admin/salles");
 		setRows(d.salles);
 		const nextEdit = {};
@@ -16169,10 +16488,10 @@ function Salles() {
 			};
 		});
 		setEditForm(nextEdit);
-	}
+	}, []);
 	(0, import_react.useEffect)(() => {
 		reload().catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
-	}, []);
+	}, [reload]);
 	function parseNum(v) {
 		const t = v.trim();
 		if (!t) return null;
@@ -16440,21 +16759,38 @@ function Salles() {
 }
 //#endregion
 //#region src/pages/admin/Stations.tsx
+var emptyForm$1 = () => ({
+	code: "",
+	name: "",
+	broadlink_ip: "",
+	salle_code: "",
+	tv_size_inches: "",
+	console_model: "",
+	vr_headset_model: "",
+	controller_count: "",
+	bundled_games: "",
+	is_active: true
+});
+function rowToForm(st) {
+	return {
+		code: st.code,
+		name: st.name,
+		broadlink_ip: st.broadlink_ip ?? "",
+		salle_code: st.salle_code ?? "",
+		tv_size_inches: st.tv_size_inches == null ? "" : String(st.tv_size_inches),
+		console_model: st.console_model ?? "",
+		vr_headset_model: st.vr_headset_model ?? "",
+		controller_count: st.controller_count == null ? "" : String(st.controller_count),
+		bundled_games: st.bundled_games ?? "",
+		is_active: st.is_active
+	};
+}
 function Stations() {
 	const [rows, setRows] = (0, import_react.useState)(null);
 	const [salles, setSalles] = (0, import_react.useState)([]);
 	const [err, setErr] = (0, import_react.useState)(null);
 	const [saving, setSaving] = (0, import_react.useState)(null);
-	const [newForm, setNewForm] = (0, import_react.useState)({
-		code: "",
-		name: "",
-		broadlink_ip: "",
-		salle_code: "",
-		tv_size_inches: "",
-		console_model: "",
-		vr_headset_model: "",
-		is_active: true
-	});
+	const [newForm, setNewForm] = (0, import_react.useState)(() => emptyForm$1());
 	const [editForm, setEditForm] = (0, import_react.useState)({});
 	function parseNullableInt(v) {
 		const t = v.trim();
@@ -16470,16 +16806,7 @@ function Stations() {
 				setSalles(s2.salles);
 				const nextEdit = {};
 				s1.stations.forEach((st) => {
-					nextEdit[st.id] = {
-						code: st.code,
-						name: st.name,
-						broadlink_ip: st.broadlink_ip,
-						salle_code: st.salle_code ?? "",
-						tv_size_inches: st.tv_size_inches == null ? "" : String(st.tv_size_inches),
-						console_model: st.console_model ?? "",
-						vr_headset_model: st.vr_headset_model ?? "",
-						is_active: st.is_active
-					};
+					nextEdit[st.id] = rowToForm(st);
 				});
 				setEditForm(nextEdit);
 			} catch (e) {
@@ -16492,52 +16819,44 @@ function Stations() {
 		setRows(d.stations);
 		const nextEdit = {};
 		d.stations.forEach((st) => {
-			nextEdit[st.id] = {
-				code: st.code,
-				name: st.name,
-				broadlink_ip: st.broadlink_ip,
-				salle_code: st.salle_code ?? "",
-				tv_size_inches: st.tv_size_inches == null ? "" : String(st.tv_size_inches),
-				console_model: st.console_model ?? "",
-				vr_headset_model: st.vr_headset_model ?? "",
-				is_active: st.is_active
-			};
+			nextEdit[st.id] = rowToForm(st);
 		});
 		setEditForm(nextEdit);
+	}
+	function payloadFromForm(f) {
+		return {
+			code: f.code.trim(),
+			name: f.name.trim(),
+			broadlink_ip: f.broadlink_ip.trim() || null,
+			usage_kind: "game_room",
+			salle_code: f.salle_code.trim() || null,
+			tv_size_inches: parseNullableInt(f.tv_size_inches),
+			console_model: f.console_model.trim() || null,
+			vr_headset_model: f.vr_headset_model.trim() || null,
+			controller_count: parseNullableInt(f.controller_count),
+			bundled_games: f.bundled_games.trim() || null,
+			ir_code_hdmi1: null,
+			ir_code_hdmi2: null,
+			is_active: f.is_active
+		};
 	}
 	async function createStation(e) {
 		e.preventDefault();
 		setErr(null);
+		if (!newForm.broadlink_ip.trim()) {
+			setErr("Broadlink IP obligatoire pour une station « salle de jeu ».");
+			return;
+		}
 		setSaving("new");
 		try {
 			const r = await fetch("/api/admin/stations", {
 				method: "POST",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					code: newForm.code.trim(),
-					name: newForm.name.trim(),
-					broadlink_ip: newForm.broadlink_ip.trim(),
-					salle_code: newForm.salle_code.trim() || null,
-					tv_size_inches: parseNullableInt(newForm.tv_size_inches),
-					console_model: newForm.console_model.trim() || null,
-					vr_headset_model: newForm.vr_headset_model.trim() || null,
-					ir_code_hdmi1: null,
-					ir_code_hdmi2: null,
-					is_active: newForm.is_active
-				})
+				body: JSON.stringify(payloadFromForm(newForm))
 			});
 			if (!r.ok) throw new ApiError(await r.text() || "Erreur", r.status);
-			setNewForm({
-				code: "",
-				name: "",
-				broadlink_ip: "",
-				salle_code: "",
-				tv_size_inches: "",
-				console_model: "",
-				vr_headset_model: "",
-				is_active: true
-			});
+			setNewForm(emptyForm$1());
 			await reload();
 		} catch (e) {
 			setErr(e instanceof Error ? e.message : "Erreur");
@@ -16550,24 +16869,17 @@ function Stations() {
 		const f = editForm[id];
 		if (!f) return;
 		setErr(null);
+		if (!f.broadlink_ip.trim()) {
+			setErr("Broadlink IP obligatoire pour une station « salle de jeu ».");
+			return;
+		}
 		setSaving(id);
 		try {
 			const r = await fetch(`/api/admin/stations/${id}`, {
 				method: "PUT",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					code: f.code.trim(),
-					name: f.name.trim(),
-					broadlink_ip: f.broadlink_ip.trim(),
-					salle_code: f.salle_code.trim() || null,
-					tv_size_inches: parseNullableInt(f.tv_size_inches),
-					console_model: f.console_model.trim() || null,
-					vr_headset_model: f.vr_headset_model.trim() || null,
-					ir_code_hdmi1: null,
-					ir_code_hdmi2: null,
-					is_active: f.is_active
-				})
+				body: JSON.stringify(payloadFromForm(f))
 			});
 			if (!r.ok) throw new ApiError(await r.text() || "Erreur", r.status);
 			await reload();
@@ -16580,7 +16892,7 @@ function Stations() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeader, {
 			title: "Stations",
-			description: "Stations et rattachement salle (édition code / IP / active)."
+			description: "Postes « salle de jeu » partenaires : QR, temps de jeu et pilotage Broadlink. Le parc location se gère dans Consoles location / Jeux location / Forfaits location."
 		}),
 		err ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "text-rose-300",
@@ -16595,12 +16907,12 @@ function Stations() {
 				className: "mb-4 text-base font-semibold",
 				children: "Créer une station"
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-				className: "grid gap-3 md:grid-cols-7",
+				className: "grid gap-3 md:grid-cols-2 lg:grid-cols-3",
 				onSubmit: createStation,
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 						required: true,
-						placeholder: "Code",
+						placeholder: "Code unique",
 						value: newForm.code,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
@@ -16610,7 +16922,7 @@ function Stations() {
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 						required: true,
-						placeholder: "Nom",
+						placeholder: "Nom affiché",
 						value: newForm.name,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
@@ -16620,7 +16932,7 @@ function Stations() {
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 						required: true,
-						placeholder: "Broadlink IP",
+						placeholder: "Broadlink IP *",
 						value: newForm.broadlink_ip,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
@@ -16629,7 +16941,7 @@ function Stations() {
 						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						placeholder: "TV pouces (optionnel)",
+						placeholder: "TV pouces",
 						value: newForm.tv_size_inches,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
@@ -16638,7 +16950,7 @@ function Stations() {
 						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						placeholder: "Console (ex: PS5)",
+						placeholder: "Console (ex: PS5, Switch…)",
 						value: newForm.console_model,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
@@ -16647,7 +16959,7 @@ function Stations() {
 						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						placeholder: "VR (ex: Quest 3)",
+						placeholder: "Casque VR (optionnel)",
 						value: newForm.vr_headset_model,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
@@ -16655,13 +16967,32 @@ function Stations() {
 						})),
 						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
 					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						placeholder: "Nombre de manettes",
+						value: newForm.controller_count,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							controller_count: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
+						placeholder: "Jeux installés / notes (texte libre)",
+						value: newForm.bundled_games,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							bundled_games: e.target.value
+						})),
+						rows: 2,
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm lg:col-span-3"
+					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
 						value: newForm.salle_code,
 						onChange: (e) => setNewForm((s) => ({
 							...s,
 							salle_code: e.target.value
 						})),
-						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm lg:col-span-3",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
 							value: "",
 							children: "(sans salle)"
@@ -16675,7 +17006,7 @@ function Stations() {
 						}, s.id))]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-						className: "flex items-center gap-2 text-sm text-cp-muted",
+						className: "flex items-center gap-2 text-sm text-cp-muted lg:col-span-3",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 							type: "checkbox",
 							checked: newForm.is_active,
@@ -16686,7 +17017,7 @@ function Stations() {
 						}), "Active"]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "md:col-span-7",
+						className: "lg:col-span-3",
 						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 							type: "submit",
 							disabled: saving === "new",
@@ -16698,10 +17029,14 @@ function Stations() {
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, {
 			className: "overflow-x-auto p-0",
 			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
-				className: "w-full min-w-[1080px] text-left text-sm",
+				className: "w-full min-w-[1280px] text-left text-sm",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
 					className: "border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted",
 					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Type"
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 							className: "px-4 py-3",
 							children: "Code"
@@ -16732,11 +17067,19 @@ function Stations() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 							className: "px-4 py-3",
+							children: "Man."
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Jeux / notes"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
 							children: "Actif"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 							className: "px-4 py-3",
-							children: "Client"
+							children: "Public"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 							className: "px-4 py-3",
@@ -16746,6 +17089,13 @@ function Stations() {
 				}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
 					className: "border-b border-white/5 hover:bg-white/[0.03]",
 					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+								tone: r.usage_kind === "rental" ? "default" : "muted",
+								children: r.usage_kind === "rental" ? "Location (hérité)" : "Salle de jeu"
+							})
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
 							className: "px-4 py-3",
 							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
@@ -16851,6 +17201,35 @@ function Stations() {
 								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
 							})
 						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: editForm[r.id]?.controller_count ?? "",
+								onChange: (e) => setEditForm((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										controller_count: e.target.value
+									}
+								})),
+								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "max-w-[200px] px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
+								value: editForm[r.id]?.bundled_games ?? "",
+								onChange: (e) => setEditForm((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										bundled_games: e.target.value
+									}
+								})),
+								rows: 2,
+								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+							})
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
 							className: "px-4 py-3",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
@@ -16876,7 +17255,10 @@ function Stations() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
 							className: "px-4 py-3",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+							children: r.usage_kind === "rental" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "text-xs text-cp-muted",
+								children: "—"
+							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
 								className: "text-cp-teal hover:underline",
 								href: `/s/${encodeURIComponent(r.code)}`,
 								children: ["/s/", r.code]
@@ -16886,11 +17268,11 @@ function Stations() {
 							className: "px-4 py-3",
 							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "flex flex-wrap items-center gap-2",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+								children: [r.usage_kind === "game_room" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 									className: "text-cp-teal hover:underline",
 									href: `/admin/stations/${r.id}/offers`,
 									children: "Offres"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("form", {
+								}) : null, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("form", {
 									onSubmit: (e) => updateStation(e, r.id),
 									children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 										type: "submit",
@@ -16926,7 +17308,7 @@ function Offers() {
 		const n = Number(t);
 		return Number.isFinite(n) ? n : null;
 	}
-	async function reload() {
+	const reload = (0, import_react.useCallback)(async () => {
 		const d = await apiGet("/admin/offers");
 		setRows(d.offers);
 		const nextEdit = {};
@@ -16939,10 +17321,10 @@ function Offers() {
 			};
 		});
 		setEditForm(nextEdit);
-	}
+	}, []);
 	(0, import_react.useEffect)(() => {
 		reload().catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
-	}, []);
+	}, [reload]);
 	async function create(e) {
 		e.preventDefault();
 		setErr(null);
@@ -17574,6 +17956,1190 @@ function ManualSession() {
 	] });
 }
 //#endregion
+//#region src/pages/admin/FeedbackAdminPage.tsx
+function FeedbackAdminPage() {
+	const [items, setItems] = (0, import_react.useState)([]);
+	const [total, setTotal] = (0, import_react.useState)(0);
+	const [page, setPage] = (0, import_react.useState)(1);
+	const [pageSize, setPageSize] = (0, import_react.useState)(20);
+	const [statusFilter, setStatusFilter] = (0, import_react.useState)("all");
+	const [ratingFilter, setRatingFilter] = (0, import_react.useState)(0);
+	const [err, setErr] = (0, import_react.useState)(null);
+	const [savingId, setSavingId] = (0, import_react.useState)(null);
+	const load = async () => {
+		try {
+			setErr(null);
+			const res = await apiGet(`/admin/feedback?${new URLSearchParams({
+				status: statusFilter,
+				rating: String(ratingFilter),
+				page: String(page),
+				page_size: String(pageSize)
+			})}`);
+			setItems(res.items);
+			setTotal(res.total);
+		} catch (e) {
+			setErr(e instanceof Error ? e.message : "Erreur");
+		}
+	};
+	(0, import_react.useEffect)(() => {
+		load();
+	}, [
+		statusFilter,
+		ratingFilter,
+		page,
+		pageSize
+	]);
+	const setStatus = async (id, status) => {
+		try {
+			setSavingId(id);
+			await apiPutJson(`/admin/feedback/${id}/status`, { status });
+			await load();
+		} catch (e) {
+			setErr(e instanceof Error ? e.message : "Erreur");
+		} finally {
+			setSavingId(null);
+		}
+	};
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeader, {
+			title: "Feedback clients",
+			description: "Suivi et traitement des retours utilisateurs."
+		}),
+		err ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "mb-3 text-rose-300",
+			children: err
+		}) : null,
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, {
+			className: "mb-4",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "grid gap-3 md:grid-cols-4",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+						value: statusFilter,
+						onChange: (e) => {
+							setStatusFilter(e.target.value);
+							setPage(1);
+						},
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "all",
+								children: "Tous statuts"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "new",
+								children: "Nouveau"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "in_review",
+								children: "En cours"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "resolved",
+								children: "Résolu"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "archived",
+								children: "Archivé"
+							})
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+						value: String(ratingFilter),
+						onChange: (e) => {
+							setRatingFilter(Number(e.target.value));
+							setPage(1);
+						},
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "0",
+								children: "Toutes notes"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "5",
+								children: "5"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "4",
+								children: "4"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "3",
+								children: "3"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "2",
+								children: "2"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "1",
+								children: "1"
+							})
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+						value: String(pageSize),
+						onChange: (e) => {
+							setPageSize(Number(e.target.value));
+							setPage(1);
+						},
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "10",
+								children: "10 / page"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "20",
+								children: "20 / page"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+								value: "50",
+								children: "50 / page"
+							})
+						]
+					})
+				]
+			})
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, {
+			className: "overflow-x-auto p-0",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+				className: "w-full min-w-[980px] text-left text-sm",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "ID"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Station"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Note"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Type"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Commentaire"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Contact"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Statut"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Actions"
+						})
+					]
+				}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: items.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/5 align-top",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 font-mono text-xs",
+							children: r.id
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-xs",
+							children: r.station_code ?? "—"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: "★".repeat(r.rating)
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-xs",
+							children: r.category
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-xs",
+							children: r.comment ?? "—"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-xs",
+							children: r.contact_email ?? r.contact_phone ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+								r.contact_email ?? "",
+								" ",
+								r.contact_phone ?? ""
+							] }) : "—"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-xs",
+							children: r.status
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex flex-wrap gap-2",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+										type: "button",
+										variant: "secondary",
+										disabled: savingId === r.id,
+										onClick: () => void setStatus(r.id, "in_review"),
+										children: "En cours"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+										type: "button",
+										disabled: savingId === r.id,
+										onClick: () => void setStatus(r.id, "resolved"),
+										children: "Résolu"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+										type: "button",
+										variant: "ghost",
+										disabled: savingId === r.id,
+										onClick: () => void setStatus(r.id, "archived"),
+										children: "Archiver"
+									})
+								]
+							})
+						})
+					]
+				}, r.id)) })]
+			})
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "mt-3 flex items-center justify-between text-xs text-cp-muted",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+				total,
+				" feedback(s) · page ",
+				page,
+				"/",
+				totalPages
+			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex gap-2",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					className: "rounded border border-cp-border px-2 py-1 disabled:opacity-40",
+					disabled: page <= 1,
+					onClick: () => setPage((p) => Math.max(1, p - 1)),
+					children: "Précédent"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					className: "rounded border border-cp-border px-2 py-1 disabled:opacity-40",
+					disabled: page >= totalPages,
+					onClick: () => setPage((p) => Math.min(totalPages, p + 1)),
+					children: "Suivant"
+				})]
+			})]
+		})
+	] });
+}
+//#endregion
+//#region src/pages/admin/RentalPlans.tsx
+var emptyForm = () => ({
+	name: "",
+	description: "",
+	duration_label: "",
+	price_xof: "",
+	rental_console_id: "",
+	is_active: true
+});
+function RentalPlans() {
+	const [data, setData] = (0, import_react.useState)(null);
+	const [err, setErr] = (0, import_react.useState)(null);
+	const [saving, setSaving] = (0, import_react.useState)(false);
+	const [editingId, setEditingId] = (0, import_react.useState)(null);
+	const [form, setForm] = (0, import_react.useState)(emptyForm);
+	const load = (0, import_react.useCallback)(async () => {
+		setErr(null);
+		setData(await apiGet("/admin/rental-plans"));
+	}, []);
+	(0, import_react.useEffect)(() => {
+		load().catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
+	}, [load]);
+	const startCreate = () => {
+		setEditingId(null);
+		setForm(emptyForm());
+	};
+	const startEdit = (p) => {
+		setEditingId(p.id);
+		setForm({
+			name: p.name,
+			description: p.description ?? "",
+			duration_label: p.duration_label,
+			price_xof: String(p.price_xof),
+			rental_console_id: p.rental_console_id ? String(p.rental_console_id) : "",
+			is_active: p.is_active
+		});
+		setErr(null);
+	};
+	const submit = async (ev) => {
+		ev.preventDefault();
+		setErr(null);
+		const price = Number(form.price_xof);
+		if (!Number.isFinite(price) || price < 0) {
+			setErr("Indiquez un prix XOF valide (nombre ≥ 0).");
+			return;
+		}
+		try {
+			setSaving(true);
+			const payload = {
+				name: form.name.trim(),
+				description: form.description.trim() ? form.description.trim() : null,
+				duration_label: form.duration_label.trim(),
+				price_xof: Math.round(price),
+				rental_console_id: form.rental_console_id ? Number(form.rental_console_id) : null,
+				is_active: form.is_active
+			};
+			if (editingId) await apiPutJson(`/admin/rental-plans/${editingId}`, payload);
+			else await apiPostJson("/admin/rental-plans", payload);
+			await load();
+			startCreate();
+		} catch (e) {
+			setErr(e instanceof Error ? e.message : "Erreur");
+		} finally {
+			setSaving(false);
+		}
+	};
+	const softDelete = async (id) => {
+		if (!window.confirm("Désactiver ce forfait ?")) return;
+		setErr(null);
+		try {
+			setSaving(true);
+			await apiPostJson(`/admin/rental-plans/${id}/delete`, {});
+			await load();
+			if (editingId === id) startCreate();
+		} catch (e) {
+			setErr(e instanceof Error ? e.message : "Erreur");
+		} finally {
+			setSaving(false);
+		}
+	};
+	const plans = data?.plans ?? [];
+	const hasPlans = plans.length > 0;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeader, {
+			title: "Forfaits location",
+			description: "Prix de location console / matériel (distincts des offres « temps de jeu »). Paiement via le tunnel /rental — PSP actuellement injecté côté serveur (Paystack)."
+		}),
+		err ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "mb-3 text-rose-300",
+			children: err
+		}) : null,
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+			className: "mb-4",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+				className: "mb-3 font-semibold",
+				children: editingId ? `Modifier le forfait #${editingId}` : "Nouveau forfait"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+				onSubmit: submit,
+				className: "grid gap-4 md:grid-cols-2",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "md:col-span-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+							htmlFor: "rp-name",
+							className: "mb-1.5 block text-xs font-medium text-cp-muted",
+							children: "Nom"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							id: "rp-name",
+							required: true,
+							value: form.name,
+							onChange: (e) => setForm((f) => ({
+								...f,
+								name: e.target.value
+							})),
+							className: "w-full rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm text-cp-text outline-none focus:border-cp-accent/50",
+							placeholder: "Ex. Demi-journée PS5",
+							autoComplete: "off"
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+						htmlFor: "rp-duration",
+						className: "mb-1.5 block text-xs font-medium text-cp-muted",
+						children: "Durée affichée"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						id: "rp-duration",
+						required: true,
+						value: form.duration_label,
+						onChange: (e) => setForm((f) => ({
+							...f,
+							duration_label: e.target.value
+						})),
+						className: "w-full rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm text-cp-text outline-none focus:border-cp-accent/50",
+						placeholder: "Ex. 2 heures, 1 journée…"
+					})] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+						htmlFor: "rp-price",
+						className: "mb-1.5 block text-xs font-medium text-cp-muted",
+						children: "Prix (XOF)"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						id: "rp-price",
+						type: "number",
+						inputMode: "numeric",
+						min: 0,
+						step: 1,
+						required: true,
+						value: form.price_xof,
+						onChange: (e) => setForm((f) => ({
+							...f,
+							price_xof: e.target.value
+						})),
+						className: "w-full rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm text-cp-text outline-none focus:border-cp-accent/50",
+						placeholder: "0"
+					})] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "md:col-span-2",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								htmlFor: "rp-console",
+								className: "mb-1.5 block text-xs font-medium text-cp-muted",
+								children: "Console cible (optionnel)"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+								id: "rp-console",
+								value: form.rental_console_id,
+								onChange: (e) => setForm((f) => ({
+									...f,
+									rental_console_id: e.target.value
+								})),
+								className: "w-full rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm text-cp-text outline-none focus:border-cp-accent/50",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: "",
+									children: "Toutes les consoles (forfait générique)"
+								}), (data?.consoles ?? []).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", {
+									value: String(s.id),
+									children: [
+										s.code,
+										" — ",
+										s.name
+									]
+								}, s.id))]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "mt-1 text-xs text-cp-muted",
+								children: "Si vide, le forfait peut servir au catalogue global ; sinon il est limité à la console choisie."
+							})
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "md:col-span-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+							htmlFor: "rp-desc",
+							className: "mb-1.5 block text-xs font-medium text-cp-muted",
+							children: "Description"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
+							id: "rp-desc",
+							value: form.description,
+							onChange: (e) => setForm((f) => ({
+								...f,
+								description: e.target.value
+							})),
+							className: "w-full rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm text-cp-text outline-none focus:border-cp-accent/50",
+							rows: 2,
+							placeholder: "Optionnel — détail affiché côté réservation si vous l’utilisez."
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+						className: "flex cursor-pointer items-center gap-2 text-sm text-cp-text md:col-span-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							type: "checkbox",
+							checked: form.is_active,
+							onChange: (e) => setForm((f) => ({
+								...f,
+								is_active: e.target.checked
+							})),
+							className: "rounded border-cp-border"
+						}), "Forfait actif (visible pour de nouvelles réservations)"]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap gap-2 md:col-span-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+							type: "submit",
+							disabled: saving,
+							children: editingId ? "Enregistrer" : "Créer"
+						}), editingId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+							type: "button",
+							variant: "ghost",
+							onClick: startCreate,
+							disabled: saving,
+							children: "Annuler"
+						}) : null]
+					})
+				]
+			})]
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, {
+			className: "overflow-x-auto p-0",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+				className: "w-full min-w-[960px] text-left text-sm",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "ID"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Nom"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Durée"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Prix"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "PSP"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Console"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Statut"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Actions"
+						})
+					]
+				}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: !hasPlans ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					colSpan: 8,
+					className: "px-4 py-10 text-center text-cp-muted",
+					children: data ? "Aucun forfait. Créez-en un avec le formulaire ci-dessus." : "Chargement…"
+				}) }) : plans.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: cnRow(p.is_active),
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 font-mono text-xs",
+							children: p.id
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 font-medium",
+							children: p.name
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-cp-muted",
+							children: p.duration_label
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 tabular-nums",
+							children: formatXof(p.price_xof)
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 font-mono text-xs uppercase text-cp-muted",
+							children: p.provider || "—"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3 text-xs text-cp-muted",
+							children: p.rental_console_code ?? "—"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: p.is_active ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+								tone: "ok",
+								children: "Actif"
+							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Badge, {
+								tone: "muted",
+								children: "Inactif"
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex flex-wrap gap-3 text-xs",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "text-cp-teal hover:underline disabled:opacity-40",
+									onClick: () => startEdit(p),
+									disabled: saving,
+									children: "Modifier"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "text-rose-300 hover:underline disabled:opacity-40",
+									onClick: () => void softDelete(p.id),
+									disabled: saving || !p.is_active,
+									children: "Désactiver"
+								})]
+							})
+						})
+					]
+				}, p.id)) })]
+			})
+		})
+	] });
+}
+function cnRow(active) {
+	return active ? "border-b border-white/5 hover:bg-white/[0.03]" : "border-b border-white/5 bg-white/[0.02] opacity-70 hover:bg-white/[0.04]";
+}
+function formatXof(n) {
+	try {
+		return `${new Intl.NumberFormat("fr-FR").format(n)} XOF`;
+	} catch {
+		return `${n} XOF`;
+	}
+}
+//#endregion
+//#region src/pages/admin/RentalConsoles.tsx
+function RentalConsoles() {
+	const [rows, setRows] = (0, import_react.useState)([]);
+	const [games, setGames] = (0, import_react.useState)([]);
+	const [err, setErr] = (0, import_react.useState)(null);
+	const [savingId, setSavingId] = (0, import_react.useState)(null);
+	const [newForm, setNewForm] = (0, import_react.useState)({
+		code: "",
+		name: "",
+		console_model: "",
+		tv_size_inches: "",
+		controller_count: "",
+		notes: "",
+		is_active: true
+	});
+	const [edit, setEdit] = (0, import_react.useState)({});
+	const [selected, setSelected] = (0, import_react.useState)({});
+	const load = (0, import_react.useCallback)(async () => {
+		const d = await apiGet("/admin/rental-consoles");
+		setRows(d.consoles);
+		setGames(d.games);
+		const next = {};
+		d.consoles.forEach((c) => {
+			next[c.id] = new Set(c.game_ids);
+		});
+		setSelected(next);
+		const e = {};
+		d.consoles.forEach((c) => {
+			e[c.id] = {
+				code: c.code,
+				name: c.name,
+				console_model: c.console_model ?? "",
+				tv_size_inches: c.tv_size_inches == null ? "" : String(c.tv_size_inches),
+				controller_count: c.controller_count == null ? "" : String(c.controller_count),
+				notes: c.notes ?? "",
+				is_active: c.is_active
+			};
+		});
+		setEdit(e);
+	}, []);
+	(0, import_react.useEffect)(() => {
+		load().catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
+	}, [load]);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeader, {
+			title: "Consoles location",
+			description: "Associez les jeux du catalogue aux consoles location (totalement indépendant des salles de jeu)."
+		}),
+		err ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "mb-3 text-rose-300",
+			children: err
+		}) : null,
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+			className: "mb-6",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+				className: "mb-3 font-semibold",
+				children: "Nouvelle console location"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+				className: "grid gap-3 md:grid-cols-3",
+				onSubmit: async (e) => {
+					e.preventDefault();
+					setErr(null);
+					try {
+						await apiPostJson("/admin/rental-consoles", {
+							...newForm,
+							tv_size_inches: newForm.tv_size_inches ? Number(newForm.tv_size_inches) : null,
+							controller_count: newForm.controller_count ? Number(newForm.controller_count) : null
+						});
+					} catch (x) {
+						setErr(x instanceof Error ? x.message : "Erreur");
+						return;
+					}
+					setNewForm({
+						code: "",
+						name: "",
+						console_model: "",
+						tv_size_inches: "",
+						controller_count: "",
+						notes: "",
+						is_active: true
+					});
+					await load();
+				},
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						required: true,
+						placeholder: "Code",
+						value: newForm.code,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							code: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						required: true,
+						placeholder: "Nom",
+						value: newForm.name,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							name: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						placeholder: "Console (PS5...)",
+						value: newForm.console_model,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							console_model: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						placeholder: "TV pouces",
+						value: newForm.tv_size_inches,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							tv_size_inches: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						placeholder: "Manettes",
+						value: newForm.controller_count,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							controller_count: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						placeholder: "Notes",
+						value: newForm.notes,
+						onChange: (e) => setNewForm((s) => ({
+							...s,
+							notes: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "md:col-span-3",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+							type: "submit",
+							children: "Créer console"
+						})
+					})
+				]
+			})]
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, {
+			className: "overflow-x-auto p-0",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+				className: "w-full min-w-[1100px] text-left text-sm",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Console"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Matériel"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Jeux disponibles"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Action"
+						})
+					]
+				}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/5",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+							className: "px-4 py-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: edit[r.id]?.code ?? "",
+								onChange: (e) => setEdit((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										code: e.target.value
+									}
+								})),
+								className: "mb-1 w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1 text-xs font-mono text-cp-accent"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: edit[r.id]?.name ?? "",
+								onChange: (e) => setEdit((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										name: e.target.value
+									}
+								})),
+								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1 text-xs"
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+							className: "px-4 py-3 text-xs text-cp-muted",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									value: edit[r.id]?.console_model ?? "",
+									onChange: (e) => setEdit((s) => ({
+										...s,
+										[r.id]: {
+											...s[r.id],
+											console_model: e.target.value
+										}
+									})),
+									className: "mb-1 w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1 text-xs"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "grid grid-cols-2 gap-1",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										value: edit[r.id]?.tv_size_inches ?? "",
+										onChange: (e) => setEdit((s) => ({
+											...s,
+											[r.id]: {
+												...s[r.id],
+												tv_size_inches: e.target.value
+											}
+										})),
+										className: "rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1 text-xs",
+										placeholder: "TV"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										value: edit[r.id]?.controller_count ?? "",
+										onChange: (e) => setEdit((s) => ({
+											...s,
+											[r.id]: {
+												...s[r.id],
+												controller_count: e.target.value
+											}
+										})),
+										className: "rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1 text-xs",
+										placeholder: "Manettes"
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									value: edit[r.id]?.notes ?? "",
+									onChange: (e) => setEdit((s) => ({
+										...s,
+										[r.id]: {
+											...s[r.id],
+											notes: e.target.value
+										}
+									})),
+									className: "mt-1 w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1 text-xs",
+									placeholder: "Notes"
+								})
+							]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "grid max-h-48 grid-cols-2 gap-2 overflow-auto",
+								children: games.map((g) => {
+									return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+										className: "flex items-center gap-2 text-xs",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "checkbox",
+											checked: selected[r.id]?.has(g.id) ?? false,
+											onChange: (e) => setSelected((s) => {
+												const curr = new Set(s[r.id] ?? []);
+												if (e.target.checked) curr.add(g.id);
+												else curr.delete(g.id);
+												return {
+													...s,
+													[r.id]: curr
+												};
+											})
+										}), g.name]
+									}, `${r.id}-${g.id}`);
+								})
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+								variant: "secondary",
+								disabled: savingId === r.id,
+								onClick: async () => {
+									setErr(null);
+									setSavingId(r.id);
+									try {
+										const e = edit[r.id];
+										if (e) await apiPutJson(`/admin/rental-consoles/${r.id}`, {
+											code: e.code,
+											name: e.name,
+											console_model: e.console_model || null,
+											tv_size_inches: e.tv_size_inches ? Number(e.tv_size_inches) : null,
+											controller_count: e.controller_count ? Number(e.controller_count) : null,
+											notes: e.notes || null,
+											is_active: e.is_active
+										});
+										await apiPutJson(`/admin/rental-consoles/${r.id}/games`, { game_ids: [...selected[r.id] ?? /* @__PURE__ */ new Set()] });
+										await load();
+									} catch (x) {
+										setErr(x instanceof Error ? x.message : "Erreur");
+									} finally {
+										setSavingId(null);
+									}
+								},
+								children: savingId === r.id ? "..." : "Enregistrer jeux"
+							})
+						})
+					]
+				}, r.id)) })]
+			})
+		})
+	] });
+}
+//#endregion
+//#region src/pages/admin/RentalGames.tsx
+function RentalGames() {
+	const [rows, setRows] = (0, import_react.useState)([]);
+	const [err, setErr] = (0, import_react.useState)(null);
+	const [saving, setSaving] = (0, import_react.useState)(null);
+	const [newForm, setNewForm] = (0, import_react.useState)({
+		name: "",
+		genre: "",
+		platform: "",
+		is_active: true
+	});
+	const [edit, setEdit] = (0, import_react.useState)({});
+	const load = (0, import_react.useCallback)(async () => {
+		const d = await apiGet("/admin/rental-games");
+		setRows(d.games);
+		const next = {};
+		d.games.forEach((g) => {
+			next[g.id] = {
+				name: g.name,
+				genre: g.genre ?? "",
+				platform: g.platform ?? "",
+				is_active: g.is_active
+			};
+		});
+		setEdit(next);
+	}, []);
+	(0, import_react.useEffect)(() => {
+		load().catch((e) => setErr(e instanceof Error ? e.message : "Erreur"));
+	}, [load]);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeader, {
+			title: "Jeux location",
+			description: "Catalogue de jeux disponibles pour le parc location (indépendant des offres temps de jeu en salle)."
+		}),
+		err ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "mb-3 text-rose-300",
+			children: err
+		}) : null,
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, {
+			className: "mb-6",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+				className: "mb-3 font-semibold",
+				children: "Nouveau jeu"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+				className: "grid gap-3 md:grid-cols-4",
+				onSubmit: async (e) => {
+					e.preventDefault();
+					setErr(null);
+					setSaving("new");
+					try {
+						await apiPostJson("/admin/rental-games", newForm);
+						setNewForm({
+							name: "",
+							genre: "",
+							platform: "",
+							is_active: true
+						});
+						await load();
+					} catch (x) {
+						setErr(x instanceof Error ? x.message : "Erreur");
+					} finally {
+						setSaving(null);
+					}
+				},
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						required: true,
+						value: newForm.name,
+						onChange: (e) => setNewForm((f) => ({
+							...f,
+							name: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						placeholder: "Nom du jeu"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						value: newForm.genre,
+						onChange: (e) => setNewForm((f) => ({
+							...f,
+							genre: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						placeholder: "Genre"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						value: newForm.platform,
+						onChange: (e) => setNewForm((f) => ({
+							...f,
+							platform: e.target.value
+						})),
+						className: "rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm",
+						placeholder: "Plateforme (PS5, Switch...)"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+						className: "flex items-center gap-2 text-sm text-cp-muted",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							type: "checkbox",
+							checked: newForm.is_active,
+							onChange: (e) => setNewForm((f) => ({
+								...f,
+								is_active: e.target.checked
+							}))
+						}), "Actif"]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "md:col-span-4",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+							type: "submit",
+							disabled: saving === "new",
+							children: saving === "new" ? "Création…" : "Ajouter le jeu"
+						})
+					})
+				]
+			})]
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, {
+			className: "overflow-x-auto p-0",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+				className: "w-full min-w-[900px] text-left text-sm",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Nom"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Genre"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Plateforme"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Actif"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+							className: "px-4 py-3",
+							children: "Action"
+						})
+					]
+				}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+					className: "border-b border-white/5",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: edit[r.id]?.name ?? "",
+								onChange: (e) => setEdit((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										name: e.target.value
+									}
+								})),
+								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: edit[r.id]?.genre ?? "",
+								onChange: (e) => setEdit((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										genre: e.target.value
+									}
+								})),
+								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: edit[r.id]?.platform ?? "",
+								onChange: (e) => setEdit((s) => ({
+									...s,
+									[r.id]: {
+										...s[r.id],
+										platform: e.target.value
+									}
+								})),
+								className: "w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+								className: "flex items-center gap-2 text-xs text-cp-muted",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									type: "checkbox",
+									checked: edit[r.id]?.is_active ?? false,
+									onChange: (e) => setEdit((s) => ({
+										...s,
+										[r.id]: {
+											...s[r.id],
+											is_active: e.target.checked
+										}
+									}))
+								}), "Actif"]
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+							className: "px-4 py-3",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+								variant: "secondary",
+								disabled: saving === r.id,
+								onClick: async () => {
+									const body = edit[r.id];
+									if (!body) return;
+									setErr(null);
+									setSaving(r.id);
+									try {
+										await apiPutJson(`/admin/rental-games/${r.id}`, body);
+										await load();
+									} catch (x) {
+										setErr(x instanceof Error ? x.message : "Erreur");
+									} finally {
+										setSaving(null);
+									}
+								},
+								children: saving === r.id ? "..." : "Enregistrer"
+							})
+						})
+					]
+				}, r.id)) })]
+			})
+		})
+	] });
+}
+//#endregion
 //#region src/pages/super/SuperHome.tsx
 function SuperHome() {
 	const { me } = useOutletContext();
@@ -17593,12 +19159,32 @@ function SuperHome() {
 		desc: "Paystack & CinetPay — réservé au super administrateur.",
 		icon: CreditCard
 	});
-	if (canOps) tiles.push({
-		to: "/admin/dashboard",
-		title: "Dashboard stations",
-		desc: "Vue opérationnelle du parc (menu admin).",
-		icon: LayoutDashboard
-	});
+	if (canOps) {
+		tiles.push({
+			to: "/admin/stations",
+			title: "Consoles / stations",
+			desc: "Ajouter et configurer les stations comme dans l’admin.",
+			icon: LayoutDashboard
+		});
+		tiles.push({
+			to: "/admin/offers",
+			title: "Jeux / offres",
+			desc: "Créer les offres de jeu (durée, prix) comme dans l’admin.",
+			icon: LayoutDashboard
+		});
+		tiles.push({
+			to: "/admin/rental-plans",
+			title: "Prix de location",
+			desc: "Gérer les forfaits de location console.",
+			icon: LayoutDashboard
+		});
+		tiles.push({
+			to: "/admin/dashboard",
+			title: "Dashboard stations",
+			desc: "Vue opérationnelle du parc (menu admin).",
+			icon: LayoutDashboard
+		});
+	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PageHeader, {
 			title: "Espace plateforme",
@@ -19403,8 +20989,24 @@ function App() {
 					element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Offers, {})
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Route, {
+					path: "rental-plans",
+					element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RentalPlans, {})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Route, {
+					path: "rental-consoles",
+					element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RentalConsoles, {})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Route, {
+					path: "rental-games",
+					element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RentalGames, {})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Route, {
 					path: "sessions",
 					element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sessions, {})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Route, {
+					path: "feedback",
+					element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FeedbackAdminPage, {})
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Route, {
 					path: "mes-utilisateurs",

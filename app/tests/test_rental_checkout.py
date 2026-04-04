@@ -14,7 +14,7 @@ if APP_DIR not in sys.path:
 
 import main as main_module  # noqa: E402
 from database import SessionLocal  # noqa: E402
-from models import RentalOrder  # noqa: E402
+from models import RentalConsole, RentalOrder, RentalPlan  # noqa: E402
 
 
 @pytest.fixture
@@ -24,11 +24,40 @@ def client() -> TestClient:
 
 
 def test_rental_checkout_simulation_paid_redirects_to_location(client: TestClient) -> None:
+    db = SessionLocal()
+    try:
+        st = (
+            db.query(RentalConsole)
+            .filter(RentalConsole.is_active.is_(True))
+            .order_by(RentalConsole.id.asc())
+            .first()
+        )
+        if st is None:
+            st = RentalConsole(
+                code="rental-st-1",
+                name="Rental Station 1",
+                is_active=True,
+            )
+            db.add(st)
+            db.commit()
+            db.refresh(st)
+        plan = (
+            db.query(RentalPlan)
+            .filter(RentalPlan.is_active.is_(True))
+            .order_by(RentalPlan.id.asc())
+            .first()
+        )
+        assert plan is not None
+        console_code = st.code
+        rental_plan_id = plan.id
+    finally:
+        db.close()
+
     r = client.post(
         "/rental/checkout",
         data={
-            "rental_plan_id": "1",
-            "station_code": "station-1",
+            "rental_plan_id": str(rental_plan_id),
+            "console_code": console_code,
             "connect": "0",
         },
         follow_redirects=False,
@@ -56,11 +85,40 @@ def test_rental_checkout_simulation_paid_redirects_to_location(client: TestClien
 
 
 def test_simulate_pay_rental_failure_marks_order_failed(client: TestClient) -> None:
+    db = SessionLocal()
+    try:
+        st = (
+            db.query(RentalConsole)
+            .filter(RentalConsole.is_active.is_(True))
+            .order_by(RentalConsole.id.asc())
+            .first()
+        )
+        if st is None:
+            st = RentalConsole(
+                code="rental-st-2",
+                name="Rental Station 2",
+                is_active=True,
+            )
+            db.add(st)
+            db.commit()
+            db.refresh(st)
+        plan = (
+            db.query(RentalPlan)
+            .filter(RentalPlan.is_active.is_(True))
+            .order_by(RentalPlan.id.asc())
+            .first()
+        )
+        assert plan is not None
+        console_code = st.code
+        rental_plan_id = plan.id
+    finally:
+        db.close()
+
     r = client.post(
         "/rental/checkout",
         data={
-            "rental_plan_id": "1",
-            "station_code": "station-1",
+            "rental_plan_id": str(rental_plan_id),
+            "console_code": console_code,
             "connect": "0",
         },
         follow_redirects=False,

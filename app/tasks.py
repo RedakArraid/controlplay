@@ -45,7 +45,25 @@ def activate_session(session_id: int) -> None:
             return
         station = session.station
         offer = session.offer
-        send_ir_command(station.broadlink_ip, station.ir_code_hdmi2)
+        ir_sent = (
+            station.usage_kind == "game_room"
+            and station.broadlink_ip
+            and station.ir_code_hdmi2
+        )
+        if ir_sent:
+            send_ir_command(station.broadlink_ip, station.ir_code_hdmi2)
+        else:
+            db.add(
+                EventLog(
+                    level="warning",
+                    message=(
+                        f"Session {session.id}: activation sans commande IR "
+                        f"(station location ou Broadlink / code HDMI2 manquant)."
+                    ),
+                    station_id=station.id,
+                    session_id=session.id,
+                )
+            )
         now = datetime.utcnow().replace(microsecond=0)
         session.status = "active"
         session.payment_status = "paid"
@@ -54,7 +72,8 @@ def activate_session(session_id: int) -> None:
         db.add(
             EventLog(
                 level="info",
-                message=f"Session {session.id} activee et TV basculee sur HDMI2.",
+                message=f"Session {session.id} activee"
+                + (" ; TV sur HDMI2 (IR)." if ir_sent else " (pas d'IR)."),
                 station_id=station.id,
                 session_id=session.id,
             )
@@ -86,12 +105,30 @@ def deactivate_session(session_id: int) -> None:
             return
 
         station = session.station
-        send_ir_command(station.broadlink_ip, station.ir_code_hdmi1)
+        ir_sent = (
+            station.usage_kind == "game_room"
+            and station.broadlink_ip
+            and station.ir_code_hdmi1
+        )
+        if ir_sent:
+            send_ir_command(station.broadlink_ip, station.ir_code_hdmi1)
+        else:
+            db.add(
+                EventLog(
+                    level="warning",
+                    message=(
+                        f"Session {session.id}: fin de session sans commande IR retour HDMI1."
+                    ),
+                    station_id=station.id,
+                    session_id=session.id,
+                )
+            )
         session.status = "expired"
         db.add(
             EventLog(
                 level="info",
-                message=f"Session {session.id} terminee et TV revenue sur HDMI1.",
+                message=f"Session {session.id} terminee"
+                + (" ; TV sur HDMI1 (IR)." if ir_sent else " (pas d'IR)."),
                 station_id=station.id,
                 session_id=session.id,
             )

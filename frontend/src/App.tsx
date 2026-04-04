@@ -17,6 +17,10 @@ import { Offers } from './pages/admin/Offers'
 import { Sessions } from './pages/admin/Sessions'
 import { MesUtilisateurs } from './pages/admin/MesUtilisateurs'
 import { ManualSession } from './pages/admin/ManualSession'
+import { FeedbackAdminPage } from './pages/admin/FeedbackAdminPage'
+import { RentalPlans } from './pages/admin/RentalPlans'
+import { RentalConsoles } from './pages/admin/RentalConsoles'
+import { RentalGames } from './pages/admin/RentalGames'
 import { SuperHome } from './pages/super/SuperHome'
 import { SuperUsers } from './pages/super/SuperUsers'
 import { SuperUserRoles } from './pages/super/SuperUserRoles'
@@ -45,11 +49,15 @@ export default function App() {
           <Route path="dashboard" element={<StationsDashboard />} />
           <Route path="salles" element={<Salles />} />
           <Route path="salles/:salleId/offers" element={<SalleOffers />} />
-            <Route path="salles/:salleId/users" element={<SalleUsers />} />
+          <Route path="salles/:salleId/users" element={<SalleUsers />} />
           <Route path="stations" element={<Stations />} />
           <Route path="stations/:stationId/offers" element={<StationOffers />} />
           <Route path="offers" element={<Offers />} />
+          <Route path="rental-plans" element={<RentalPlans />} />
+          <Route path="rental-consoles" element={<RentalConsoles />} />
+          <Route path="rental-games" element={<RentalGames />} />
           <Route path="sessions" element={<Sessions />} />
+          <Route path="feedback" element={<FeedbackAdminPage />} />
           <Route path="mes-utilisateurs" element={<MesUtilisateurs />} />
           <Route path="manual-session" element={<ManualSession />} />
         </Route>

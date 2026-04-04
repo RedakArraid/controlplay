@@ -9,12 +9,56 @@ type Row = {
   id: number
   code: string
   name: string
-  broadlink_ip: string
+  broadlink_ip: string | null
+  usage_kind: 'game_room' | 'rental'
   tv_size_inches: number | null
   console_model: string | null
   vr_headset_model: string | null
+  controller_count: number | null
+  bundled_games: string | null
   salle_code: string
   is_active: boolean
+}
+
+type FormShape = {
+  code: string
+  name: string
+  broadlink_ip: string
+  salle_code: string
+  tv_size_inches: string
+  console_model: string
+  vr_headset_model: string
+  controller_count: string
+  bundled_games: string
+  is_active: boolean
+}
+
+const emptyForm = (): FormShape => ({
+  code: '',
+  name: '',
+  broadlink_ip: '',
+  salle_code: '',
+  tv_size_inches: '',
+  console_model: '',
+  vr_headset_model: '',
+  controller_count: '',
+  bundled_games: '',
+  is_active: true,
+})
+
+function rowToForm(st: Row): FormShape {
+  return {
+    code: st.code,
+    name: st.name,
+    broadlink_ip: st.broadlink_ip ?? '',
+    salle_code: st.salle_code ?? '',
+    tv_size_inches: st.tv_size_inches == null ? '' : String(st.tv_size_inches),
+    console_model: st.console_model ?? '',
+    vr_headset_model: st.vr_headset_model ?? '',
+    controller_count: st.controller_count == null ? '' : String(st.controller_count),
+    bundled_games: st.bundled_games ?? '',
+    is_active: st.is_active,
+  }
 }
 
 export function Stations() {
@@ -25,18 +69,9 @@ export function Stations() {
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState<number | 'new' | null>(null)
 
-  const [newForm, setNewForm] = useState({
-    code: '',
-    name: '',
-    broadlink_ip: '',
-    salle_code: '',
-    tv_size_inches: '',
-    console_model: '',
-    vr_headset_model: '',
-    is_active: true,
-  })
+  const [newForm, setNewForm] = useState<FormShape>(() => emptyForm())
 
-  const [editForm, setEditForm] = useState<Record<number, typeof newForm>>({})
+  const [editForm, setEditForm] = useState<Record<number, FormShape>>({})
 
   function parseNullableInt(v: string): number | null {
     const t = v.trim()
@@ -56,18 +91,9 @@ export function Stations() {
         ])
         setRows(s1.stations)
         setSalles(s2.salles)
-        const nextEdit: Record<number, typeof newForm> = {}
+        const nextEdit: Record<number, FormShape> = {}
         s1.stations.forEach((st) => {
-          nextEdit[st.id] = {
-            code: st.code,
-            name: st.name,
-            broadlink_ip: st.broadlink_ip,
-            salle_code: st.salle_code ?? '',
-            tv_size_inches: st.tv_size_inches == null ? '' : String(st.tv_size_inches),
-            console_model: st.console_model ?? '',
-            vr_headset_model: st.vr_headset_model ?? '',
-            is_active: st.is_active,
-          }
+          nextEdit[st.id] = rowToForm(st)
         })
         setEditForm(nextEdit)
       } catch (e) {
@@ -79,58 +105,51 @@ export function Stations() {
   async function reload() {
     const d = await apiGet<{ stations: Row[] }>('/admin/stations')
     setRows(d.stations)
-    const nextEdit: Record<number, typeof newForm> = {}
+    const nextEdit: Record<number, FormShape> = {}
     d.stations.forEach((st) => {
-      nextEdit[st.id] = {
-        code: st.code,
-        name: st.name,
-        broadlink_ip: st.broadlink_ip,
-        salle_code: st.salle_code ?? '',
-        tv_size_inches: st.tv_size_inches == null ? '' : String(st.tv_size_inches),
-        console_model: st.console_model ?? '',
-        vr_headset_model: st.vr_headset_model ?? '',
-        is_active: st.is_active,
-      }
+      nextEdit[st.id] = rowToForm(st)
     })
     setEditForm(nextEdit)
+  }
+
+  function payloadFromForm(f: FormShape) {
+    return {
+      code: f.code.trim(),
+      name: f.name.trim(),
+      broadlink_ip: f.broadlink_ip.trim() || null,
+      usage_kind: 'game_room' as const,
+      salle_code: f.salle_code.trim() || null,
+      tv_size_inches: parseNullableInt(f.tv_size_inches),
+      console_model: f.console_model.trim() || null,
+      vr_headset_model: f.vr_headset_model.trim() || null,
+      controller_count: parseNullableInt(f.controller_count),
+      bundled_games: f.bundled_games.trim() || null,
+      ir_code_hdmi1: null,
+      ir_code_hdmi2: null,
+      is_active: f.is_active,
+    }
   }
 
   async function createStation(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
+    if (!newForm.broadlink_ip.trim()) {
+      setErr('Broadlink IP obligatoire pour une station « salle de jeu ».')
+      return
+    }
     setSaving('new')
     try {
       const r = await fetch('/api/admin/stations', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: newForm.code.trim(),
-          name: newForm.name.trim(),
-          broadlink_ip: newForm.broadlink_ip.trim(),
-          salle_code: newForm.salle_code.trim() || null,
-          tv_size_inches: parseNullableInt(newForm.tv_size_inches),
-          console_model: newForm.console_model.trim() || null,
-          vr_headset_model: newForm.vr_headset_model.trim() || null,
-          ir_code_hdmi1: null,
-          ir_code_hdmi2: null,
-          is_active: newForm.is_active,
-        }),
+        body: JSON.stringify(payloadFromForm(newForm)),
       })
       if (!r.ok) {
         const msg = await r.text()
         throw new ApiError(msg || 'Erreur', r.status)
       }
-      setNewForm({
-        code: '',
-        name: '',
-        broadlink_ip: '',
-        salle_code: '',
-        tv_size_inches: '',
-        console_model: '',
-        vr_headset_model: '',
-        is_active: true,
-      })
+      setNewForm(emptyForm())
       await reload()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Erreur')
@@ -144,24 +163,17 @@ export function Stations() {
     const f = editForm[id]
     if (!f) return
     setErr(null)
+    if (!f.broadlink_ip.trim()) {
+      setErr('Broadlink IP obligatoire pour une station « salle de jeu ».')
+      return
+    }
     setSaving(id)
     try {
       const r = await fetch(`/api/admin/stations/${id}`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: f.code.trim(),
-          name: f.name.trim(),
-          broadlink_ip: f.broadlink_ip.trim(),
-          salle_code: f.salle_code.trim() || null,
-          tv_size_inches: parseNullableInt(f.tv_size_inches),
-          console_model: f.console_model.trim() || null,
-          vr_headset_model: f.vr_headset_model.trim() || null,
-          ir_code_hdmi1: null,
-          ir_code_hdmi2: null,
-          is_active: f.is_active,
-        }),
+        body: JSON.stringify(payloadFromForm(f)),
       })
       if (!r.ok) {
         const msg = await r.text()
@@ -179,7 +191,7 @@ export function Stations() {
     <>
       <PageHeader
         title="Stations"
-        description="Stations et rattachement salle (édition code / IP / active)."
+        description="Postes « salle de jeu » partenaires : QR, temps de jeu et pilotage Broadlink. Le parc location se gère dans Consoles location / Jeux location / Forfaits location."
       />
       {err ? <p className="text-rose-300">{err}</p> : null}
       {!rows ? (
@@ -188,24 +200,24 @@ export function Stations() {
         <>
           <Card className="mb-6">
             <h2 className="mb-4 text-base font-semibold">Créer une station</h2>
-            <form className="grid gap-3 md:grid-cols-7" onSubmit={createStation}>
+            <form className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" onSubmit={createStation}>
               <input
                 required
-                placeholder="Code"
+                placeholder="Code unique"
                 value={newForm.code}
                 onChange={(e) => setNewForm((s) => ({ ...s, code: e.target.value }))}
                 className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
               />
               <input
                 required
-                placeholder="Nom"
+                placeholder="Nom affiché"
                 value={newForm.name}
                 onChange={(e) => setNewForm((s) => ({ ...s, name: e.target.value }))}
                 className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
               />
               <input
                 required
-                placeholder="Broadlink IP"
+                placeholder="Broadlink IP *"
                 value={newForm.broadlink_ip}
                 onChange={(e) =>
                   setNewForm((s) => ({ ...s, broadlink_ip: e.target.value }))
@@ -213,7 +225,7 @@ export function Stations() {
                 className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
               />
               <input
-                placeholder="TV pouces (optionnel)"
+                placeholder="TV pouces"
                 value={newForm.tv_size_inches}
                 onChange={(e) =>
                   setNewForm((s) => ({ ...s, tv_size_inches: e.target.value }))
@@ -221,7 +233,7 @@ export function Stations() {
                 className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
               />
               <input
-                placeholder="Console (ex: PS5)"
+                placeholder="Console (ex: PS5, Switch…)"
                 value={newForm.console_model}
                 onChange={(e) =>
                   setNewForm((s) => ({ ...s, console_model: e.target.value }))
@@ -229,17 +241,34 @@ export function Stations() {
                 className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
               />
               <input
-                placeholder="VR (ex: Quest 3)"
+                placeholder="Casque VR (optionnel)"
                 value={newForm.vr_headset_model}
                 onChange={(e) =>
                   setNewForm((s) => ({ ...s, vr_headset_model: e.target.value }))
                 }
                 className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
               />
+              <input
+                placeholder="Nombre de manettes"
+                value={newForm.controller_count}
+                onChange={(e) =>
+                  setNewForm((s) => ({ ...s, controller_count: e.target.value }))
+                }
+                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
+              />
+              <textarea
+                placeholder="Jeux installés / notes (texte libre)"
+                value={newForm.bundled_games}
+                onChange={(e) =>
+                  setNewForm((s) => ({ ...s, bundled_games: e.target.value }))
+                }
+                rows={2}
+                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm lg:col-span-3"
+              />
               <select
                 value={newForm.salle_code}
                 onChange={(e) => setNewForm((s) => ({ ...s, salle_code: e.target.value }))}
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm lg:col-span-3"
               >
                 <option value="">(sans salle)</option>
                 {salles.map((s) => (
@@ -248,7 +277,7 @@ export function Stations() {
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-2 text-sm text-cp-muted">
+              <label className="flex items-center gap-2 text-sm text-cp-muted lg:col-span-3">
                 <input
                   type="checkbox"
                   checked={newForm.is_active}
@@ -256,7 +285,7 @@ export function Stations() {
                 />
                 Active
               </label>
-              <div className="md:col-span-7">
+              <div className="lg:col-span-3">
                 <Button type="submit" disabled={saving === 'new'}>
                   {saving === 'new' ? 'Création…' : 'Créer la station'}
                 </Button>
@@ -265,9 +294,10 @@ export function Stations() {
           </Card>
 
           <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[1080px] text-left text-sm">
+            <table className="w-full min-w-[1280px] text-left text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted">
+                  <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Nom</th>
                   <th className="px-4 py-3">Salle</th>
@@ -275,8 +305,10 @@ export function Stations() {
                   <th className="px-4 py-3">TV</th>
                   <th className="px-4 py-3">Console</th>
                   <th className="px-4 py-3">VR</th>
+                  <th className="px-4 py-3">Man.</th>
+                  <th className="px-4 py-3">Jeux / notes</th>
                   <th className="px-4 py-3">Actif</th>
-                  <th className="px-4 py-3">Client</th>
+                  <th className="px-4 py-3">Public</th>
                   <th className="px-4 py-3">Action</th>
                 </tr>
               </thead>
@@ -286,6 +318,13 @@ export function Stations() {
                     key={r.id}
                     className="border-b border-white/5 hover:bg-white/[0.03]"
                   >
+                    <td className="px-4 py-3">
+                      <Badge tone={r.usage_kind === 'rental' ? 'default' : 'muted'}>
+                        {r.usage_kind === 'rental'
+                          ? 'Location (hérité)'
+                          : 'Salle de jeu'}
+                      </Badge>
+                    </td>
                     <td className="px-4 py-3">
                       <input
                         value={editForm[r.id]?.code ?? ''}
@@ -387,6 +426,31 @@ export function Stations() {
                       />
                     </td>
                     <td className="px-4 py-3">
+                      <input
+                        value={editForm[r.id]?.controller_count ?? ''}
+                        onChange={(e) =>
+                          setEditForm((s) => ({
+                            ...s,
+                            [r.id]: { ...s[r.id], controller_count: e.target.value },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+                      />
+                    </td>
+                    <td className="max-w-[200px] px-4 py-3">
+                      <textarea
+                        value={editForm[r.id]?.bundled_games ?? ''}
+                        onChange={(e) =>
+                          setEditForm((s) => ({
+                            ...s,
+                            [r.id]: { ...s[r.id], bundled_games: e.target.value },
+                          }))
+                        }
+                        rows={2}
+                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
                       <Badge tone={r.is_active ? 'ok' : 'muted'}>
                         {r.is_active ? 'oui' : 'non'}
                       </Badge>
@@ -410,21 +474,27 @@ export function Stations() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <a
-                        className="text-cp-teal hover:underline"
-                        href={`/s/${encodeURIComponent(r.code)}`}
-                      >
-                        /s/{r.code}
-                      </a>
+                      {r.usage_kind === 'rental' ? (
+                        <span className="text-xs text-cp-muted">—</span>
+                      ) : (
+                        <a
+                          className="text-cp-teal hover:underline"
+                          href={`/s/${encodeURIComponent(r.code)}`}
+                        >
+                          /s/{r.code}
+                        </a>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <a
-                          className="text-cp-teal hover:underline"
-                          href={`/admin/stations/${r.id}/offers`}
-                        >
-                          Offres
-                        </a>
+                        {r.usage_kind === 'game_room' ? (
+                          <a
+                            className="text-cp-teal hover:underline"
+                            href={`/admin/stations/${r.id}/offers`}
+                          >
+                            Offres
+                          </a>
+                        ) : null}
                         <form onSubmit={(e) => updateStation(e, r.id)}>
                           <Button
                             type="submit"

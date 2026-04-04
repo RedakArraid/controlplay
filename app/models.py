@@ -129,10 +129,15 @@ class Station(Base):
     salle_id: Mapped[Optional[int]] = mapped_column(ForeignKey("salles.id"), nullable=True, index=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    broadlink_ip: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Obligatoire côté API pour toute nouvelle fiche (IR / sessions). Valeur héritée éventuelle : ``rental`` (à migrer vers ``rental_consoles``).
+    broadlink_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: ``game_room`` = poste salle partenaire. ``rental`` = lignes héritées avant séparation du parc location (ne plus créer).
+    usage_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="game_room")
     tv_size_inches: Mapped[int | None] = mapped_column(Integer, nullable=True)
     console_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
     vr_headset_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    controller_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bundled_games: Mapped[str | None] = mapped_column(Text, nullable=True)
     ir_code_hdmi1: Mapped[str] = mapped_column(Text, nullable=True)
     ir_code_hdmi2: Mapped[str] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -159,7 +164,9 @@ class StationOffer(Base):
     __tablename__ = "station_offers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"), nullable=False, index=True)
+    station_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("stations.id"), nullable=True, index=True
+    )
     offer_id: Mapped[int] = mapped_column(ForeignKey("offers.id"), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -259,10 +266,12 @@ class RentalPlan(Base):
     duration_label: Mapped[str] = mapped_column(String(64), nullable=False)
     price_xof: Mapped[int] = mapped_column(Integer, nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False, default="paystack")
-    station_id: Mapped[Optional[int]] = mapped_column(ForeignKey("stations.id"), nullable=True, index=True)
+    rental_console_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rental_consoles.id"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    station = relationship("Station")
+    rental_console = relationship("RentalConsole")
 
 
 class RentalOrder(Base):
@@ -270,7 +279,9 @@ class RentalOrder(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     rental_plan_id: Mapped[int] = mapped_column(ForeignKey("rental_plans.id"), nullable=False, index=True)
-    station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"), nullable=False, index=True)
+    rental_console_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rental_consoles.id"), nullable=True, index=True
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     payment_provider: Mapped[str] = mapped_column(String(32), nullable=False)
     payment_reference: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
@@ -281,5 +292,67 @@ class RentalOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     plan = relationship("RentalPlan")
-    station = relationship("Station")
+    rental_console = relationship("RentalConsole")
     user = relationship("User")
+
+
+class RentalConsole(Base):
+    __tablename__ = "rental_consoles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    tv_size_inches: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    console_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    controller_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class RentalGame(Base):
+    __tablename__ = "rental_games"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    genre: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    console_links = relationship(
+        "RentalConsoleGame", back_populates="game", cascade="all, delete-orphan"
+    )
+
+
+class RentalConsoleGame(Base):
+    __tablename__ = "rental_console_games"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    rental_console_id: Mapped[int] = mapped_column(
+        ForeignKey("rental_consoles.id"), nullable=False, index=True
+    )
+    rental_game_id: Mapped[int] = mapped_column(ForeignKey("rental_games.id"), nullable=False, index=True)
+
+    rental_console = relationship("RentalConsole")
+    game = relationship("RentalGame", back_populates="console_links")
+
+
+class FeedbackEntry(Base):
+    __tablename__ = "feedback_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    station_id: Mapped[Optional[int]] = mapped_column(ForeignKey("stations.id"), nullable=True, index=True)
+    session_id: Mapped[Optional[int]] = mapped_column(ForeignKey("game_sessions.id"), nullable=True, index=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="general")
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="new")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    handled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    handled_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    station = relationship("Station")
+    session = relationship("GameSession")

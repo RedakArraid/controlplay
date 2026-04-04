@@ -32,6 +32,11 @@ ADMIN_USER = (os.environ.get("ADMIN_USERNAME") or "").strip() or "admin@test.com
 ADMIN_PASS = (os.environ.get("ADMIN_PASSWORD") or "").strip() or "testpass123"
 
 
+def _fill_login_form(page, username: str, password: str) -> None:
+    page.locator('input[name="identifier"]').fill(username)
+    page.locator('input[name="password"]').fill(password)
+
+
 @pytest.fixture(scope="module")
 def e2e_server():
     env = os.environ.copy()
@@ -104,15 +109,19 @@ def test_super_admin_redirects_to_login_in_browser(page, e2e_server):
 @pytest.mark.browser
 def test_login_page_visible(page, e2e_server):
     page.goto(f"{e2e_server}/login")
-    expect(page.get_by_role("heading", name=re.compile("ControlPlay", re.I))).to_be_visible()
-    expect(page.get_by_text(re.compile(r"Connexion administration", re.I))).to_be_visible()
+    expect(page.get_by_role("heading", name=re.compile("Connexion", re.I))).to_be_visible()
+    expect(page.get_by_role("link", name=re.compile("ControlPlay", re.I))).to_be_visible()
+    expect(
+        page.get_by_text(
+            re.compile(r"Saisissez l.email ou le téléphone", re.I),
+        )
+    ).to_be_visible()
 
 
 @pytest.mark.browser
 def test_login_then_admin_dashboard(page, e2e_server):
     page.goto(f"{e2e_server}/login?next=/admin")
-    page.get_by_label("Email ou téléphone").fill(ADMIN_USER)
-    page.get_by_label("Mot de passe").fill(ADMIN_PASS)
+    _fill_login_form(page, ADMIN_USER, ADMIN_PASS)
     page.get_by_role("button", name="Se connecter").click()
     expect(page).to_have_url(f"{e2e_server}/admin")
 
@@ -120,18 +129,16 @@ def test_login_then_admin_dashboard(page, e2e_server):
 @pytest.mark.browser
 def test_login_then_super_admin_hub(page, e2e_server):
     page.goto(f"{e2e_server}/login?next=/super-admin")
-    page.get_by_label("Email ou téléphone").fill(ADMIN_USER)
-    page.get_by_label("Mot de passe").fill(ADMIN_PASS)
+    _fill_login_form(page, ADMIN_USER, ADMIN_PASS)
     page.get_by_role("button", name="Se connecter").click()
     expect(page).to_have_url(f"{e2e_server}/super-admin")
-    expect(page.get_by_text(re.compile(r"super administrateur", re.I))).to_be_visible()
+    expect(page.get_by_role("heading", name="Espace plateforme")).to_be_visible()
 
 
 @pytest.mark.browser
 def test_logout_clears_session_in_browser(page, e2e_server):
     page.goto(f"{e2e_server}/login?next=/admin")
-    page.get_by_label("Email ou téléphone").fill(ADMIN_USER)
-    page.get_by_label("Mot de passe").fill(ADMIN_PASS)
+    _fill_login_form(page, ADMIN_USER, ADMIN_PASS)
     page.get_by_role("button", name="Se connecter").click()
     expect(page).to_have_url(f"{e2e_server}/admin")
 
@@ -146,9 +153,8 @@ def test_logout_clears_session_in_browser(page, e2e_server):
 def test_navigateur_page_login_avec_next_admin(page, e2e_server):
     """URL /login?next=%2Fadmin puis formulaire → panel /admin."""
     page.goto(f"{e2e_server}/login?next={urllib.parse.quote('/admin')}")
-    expect(page.get_by_text(re.compile(r"Connexion administration", re.I))).to_be_visible()
-    page.get_by_label("Email ou téléphone").fill(ADMIN_USER)
-    page.get_by_label("Mot de passe").fill(ADMIN_PASS)
+    expect(page.get_by_role("heading", name=re.compile("Connexion", re.I))).to_be_visible()
+    _fill_login_form(page, ADMIN_USER, ADMIN_PASS)
     page.get_by_role("button", name="Se connecter").click()
     expect(page).to_have_url(f"{e2e_server}/admin")
 
@@ -157,8 +163,7 @@ def test_navigateur_page_login_avec_next_admin(page, e2e_server):
 def test_navigateur_page_login_avec_next_super_admin(page, e2e_server):
     """URL /login?next=%2Fsuper-admin puis formulaire → hub super admin."""
     page.goto(f"{e2e_server}/login?next={urllib.parse.quote('/super-admin')}")
-    page.get_by_label("Email ou téléphone").fill(ADMIN_USER)
-    page.get_by_label("Mot de passe").fill(ADMIN_PASS)
+    _fill_login_form(page, ADMIN_USER, ADMIN_PASS)
     page.get_by_role("button", name="Se connecter").click()
     expect(page).to_have_url(f"{e2e_server}/super-admin")
-    expect(page.get_by_text(re.compile(r"super administrateur", re.I))).to_be_visible()
+    expect(page.get_by_role("heading", name="Espace plateforme")).to_be_visible()

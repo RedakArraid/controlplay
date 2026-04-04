@@ -73,10 +73,14 @@ export function Login() {
         <Card className="p-8">
           <form onSubmit={onSubmit} className="space-y-5">
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-cp-muted">
+              <label
+                htmlFor="login-identifier"
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-cp-muted"
+              >
                 Email ou téléphone
               </label>
               <input
+                id="login-identifier"
                 name="identifier"
                 autoComplete="username"
                 value={identifier}
@@ -86,10 +90,14 @@ export function Login() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-cp-muted">
+              <label
+                htmlFor="login-password"
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-cp-muted"
+              >
                 Mot de passe
               </label>
               <input
+                id="login-password"
                 name="password"
                 type="password"
                 autoComplete="current-password"

@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/ui/Button'
-import { apiGet, postFormNavigate } from '../../lib/api'
+import { apiGet, apiPostJson, postFormNavigate } from '../../lib/api'
 
 type StationOffer = {
   id: number
@@ -30,12 +31,29 @@ type CheckoutForm = {
   connect: boolean
 }
 
+type FeedbackForm = {
+  rating: number
+  category: 'general' | 'experience' | 'paiement' | 'materiel' | 'support'
+  comment: string
+  contact_email: string
+  contact_phone: string
+}
+
 export function StationCheckoutPage() {
   const { stationCode = '' } = useParams()
   const [data, setData] = useState<StationDetail | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [savingOfferId, setSavingOfferId] = useState<number | null>(null)
   const [form, setForm] = useState<CheckoutForm>({ email: '', phone: '', connect: false })
+  const [feedbackForm, setFeedbackForm] = useState<FeedbackForm>({
+    rating: 5,
+    category: 'general',
+    comment: '',
+    contact_email: '',
+    contact_phone: '',
+  })
+  const [feedbackDone, setFeedbackDone] = useState(false)
+  const [feedbackSaving, setFeedbackSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -68,6 +86,34 @@ export function StationCheckoutPage() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Erreur checkout')
       setSavingOfferId(null)
+    }
+  }
+
+  const submitFeedback = async (ev: FormEvent) => {
+    ev.preventDefault()
+    try {
+      setFeedbackSaving(true)
+      setErr(null)
+      await apiPostJson<{ ok: boolean; feedback_id: number }>('/public/feedback', {
+        station_code: stationCode,
+        rating: feedbackForm.rating,
+        category: feedbackForm.category,
+        comment: feedbackForm.comment || null,
+        contact_email: feedbackForm.contact_email || null,
+        contact_phone: feedbackForm.contact_phone || null,
+      })
+      setFeedbackDone(true)
+      setFeedbackForm({
+        rating: 5,
+        category: 'general',
+        comment: '',
+        contact_email: '',
+        contact_phone: '',
+      })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erreur feedback')
+    } finally {
+      setFeedbackSaving(false)
     }
   }
 
@@ -178,6 +224,68 @@ export function StationCheckoutPage() {
           </div>
         </div>
       ) : null}
+
+      <Card className="mt-8">
+        <h2 className="mb-2 font-semibold">Votre feedback</h2>
+        <p className="mb-3 text-sm text-cp-muted">
+          Dites-nous ce qui s’est bien passé ou ce qu’on doit améliorer.
+        </p>
+        {feedbackDone ? <p className="mb-3 text-emerald-300">Merci, votre avis est enregistré.</p> : null}
+        <form onSubmit={submitFeedback} className="grid gap-3 md:grid-cols-2">
+          <select
+            value={String(feedbackForm.rating)}
+            onChange={(e) => setFeedbackForm((f) => ({ ...f, rating: Number(e.target.value) }))}
+            className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+          >
+            <option value="5">5 - Excellent</option>
+            <option value="4">4 - Bien</option>
+            <option value="3">3 - Moyen</option>
+            <option value="2">2 - Décevant</option>
+            <option value="1">1 - Mauvais</option>
+          </select>
+          <select
+            value={feedbackForm.category}
+            onChange={(e) =>
+              setFeedbackForm((f) => ({
+                ...f,
+                category: e.target.value as FeedbackForm['category'],
+              }))
+            }
+            className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+          >
+            <option value="general">Général</option>
+            <option value="experience">Expérience de jeu</option>
+            <option value="paiement">Paiement</option>
+            <option value="materiel">Matériel</option>
+            <option value="support">Support</option>
+          </select>
+          <textarea
+            value={feedbackForm.comment}
+            onChange={(e) => setFeedbackForm((f) => ({ ...f, comment: e.target.value }))}
+            className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm md:col-span-2"
+            rows={3}
+            placeholder="Votre message (optionnel)"
+          />
+          <input
+            type="email"
+            value={feedbackForm.contact_email}
+            onChange={(e) => setFeedbackForm((f) => ({ ...f, contact_email: e.target.value }))}
+            className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+            placeholder="Email de contact (optionnel)"
+          />
+          <input
+            value={feedbackForm.contact_phone}
+            onChange={(e) => setFeedbackForm((f) => ({ ...f, contact_phone: e.target.value }))}
+            className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
+            placeholder="Téléphone de contact (optionnel)"
+          />
+          <div className="md:col-span-2">
+            <Button type="submit" disabled={feedbackSaving}>
+              {feedbackSaving ? 'Envoi…' : 'Envoyer mon avis'}
+            </Button>
+          </div>
+        </form>
+      </Card>
     </section>
   )
 }

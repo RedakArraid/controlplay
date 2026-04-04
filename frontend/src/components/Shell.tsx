@@ -1,53 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
-import { LogOut, Menu, Sparkles, X } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router-dom'
+import { LogOut, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import type { NavItem } from '../types'
 import { cn } from '../lib/cn'
-
-export function PublicShell({
-  children,
-  variant = 'home',
-}: {
-  children: React.ReactNode
-  variant?: 'home' | 'login'
-}) {
-  return (
-    <div className="relative min-h-screen overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 grid-bg opacity-40" />
-      <header className="relative z-10 border-b border-white/5 bg-cp-bg/40 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-          <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cp-accent to-cp-teal text-cp-bg shadow-lg">
-              <Sparkles className="h-5 w-5" aria-hidden />
-            </span>
-            <span>ControlPlay</span>
-          </Link>
-          <nav className="flex items-center gap-3 text-sm">
-            {variant === 'home' ? (
-              <Link
-                to="/login"
-                className="rounded-lg px-3 py-2 text-cp-muted transition hover:bg-white/5 hover:text-cp-text"
-              >
-                Se connecter
-              </Link>
-            ) : (
-              <Link
-                to="/"
-                className="rounded-lg px-3 py-2 text-cp-muted transition hover:bg-white/5 hover:text-cp-text"
-              >
-                Accueil
-              </Link>
-            )}
-          </nav>
-        </div>
-      </header>
-      <main className="relative z-10 mx-auto max-w-6xl px-4 py-10 md:px-6">
-        {children}
-      </main>
-    </div>
-  )
-}
 
 export function AppShell({
   zone,

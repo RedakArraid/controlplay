@@ -69,6 +69,7 @@ def test_api_admin_stations_create_then_update(client: TestClient) -> None:
     assert created["code"] == station_code
     assert created["salle_code"] == salle_code
     assert created["is_active"] is True
+    assert created.get("usage_kind") == "game_room"
 
     station_id = created["id"]
     r_update = client.put(
@@ -88,4 +89,25 @@ def test_api_admin_stations_create_then_update(client: TestClient) -> None:
     assert updated["name"] == "Station API JSON MAJ"
     assert updated["broadlink_ip"] == "192.168.0.124"
     assert updated["is_active"] is False
+
+
+def test_api_admin_station_rejects_rental_usage_kind(client: TestClient) -> None:
+    """La location se déclare via rental-consoles, pas comme ligne ``stations``."""
+    _login_admin(client)
+
+    code = f"rent-st-{uuid.uuid4().hex[:8]}"
+    r = client.post(
+        "/api/admin/stations",
+        json={
+            "code": code,
+            "name": "Tentative location",
+            "usage_kind": "rental",
+            "broadlink_ip": "192.168.1.50",
+            "salle_code": None,
+            "is_active": True,
+            "ir_code_hdmi1": None,
+            "ir_code_hdmi2": None,
+        },
+    )
+    assert r.status_code == 400, r.text
 

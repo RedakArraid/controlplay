@@ -31,6 +31,7 @@ from models import (
     PaymentProviderConfig,
     RentalOrder,
     RentalPlan,
+    RentalConsole,
     Salle,
     Role,
     SalleUser,
@@ -1068,7 +1069,6 @@ def activate_paid_rental(
             db,
             f"Location: verification transaction echouee ({source}) pour {order_db.payment_reference}",
             level="warning",
-            station_id=order_db.station_id,
         )
         return False
     order_db.payment_status = "paid"
@@ -1077,7 +1077,6 @@ def activate_paid_rental(
     log_event(
         db,
         f"Location payée ({source}) ref={order_db.payment_reference}",
-        station_id=order_db.station_id,
     )
     return True
 
@@ -1114,6 +1113,19 @@ def seed_default_data() -> None:
                 salle_id=salle.id if salle else None,
             )
             db.add(station)
+            db.commit()
+
+        if db.query(RentalConsole.id).filter(RentalConsole.is_active.is_(True)).first() is None:
+            db.add(
+                RentalConsole(
+                    code="rental-console-1",
+                    name="Console location 1",
+                    console_model="PS5",
+                    controller_count=2,
+                    tv_size_inches=55,
+                    is_active=True,
+                )
+            )
             db.commit()
 
         # Offres globales: on s'assure que les 2 providers existent par défaut (paystack prioritaire).
@@ -1157,7 +1169,11 @@ def seed_default_data() -> None:
             .all()
         )
         salles = db.query(Salle).all()
-        stations_no_salle = db.query(Station).filter(Station.salle_id.is_(None)).all()
+        stations_no_salle = (
+            db.query(Station)
+            .filter(Station.salle_id.is_(None), Station.usage_kind == "game_room")
+            .all()
+        )
 
         for sl in salles:
             for go in global_offer_rows:
@@ -1188,7 +1204,7 @@ def seed_default_data() -> None:
                     duration_label="24 h",
                     price_xof=5000,
                     provider="paystack",
-                    station_id=None,
+                    rental_console_id=None,
                     is_active=True,
                 )
             )
@@ -1199,7 +1215,7 @@ def seed_default_data() -> None:
                     duration_label="Week-end",
                     price_xof=15000,
                     provider="paystack",
-                    station_id=None,
+                    rental_console_id=None,
                     is_active=True,
                 )
             )
@@ -1662,10 +1678,10 @@ def rental_catalog_page(db: Session = Depends(get_db)):
         .order_by(RentalPlan.price_xof.asc(), RentalPlan.id.asc())
         .all()
     )
-    stations = (
-        db.query(Station)
-        .filter(Station.is_active.is_(True))
-        .order_by(Station.code.asc())
+    consoles = (
+        db.query(RentalConsole)
+        .filter(RentalConsole.is_active.is_(True))
+        .order_by(RentalConsole.code.asc())
         .all()
     )
     plan_options = "".join(
@@ -1674,10 +1690,10 @@ def rental_catalog_page(db: Session = Depends(get_db)):
             for p in plans
         ]
     )
-    station_options = "".join(
+    console_options = "".join(
         [
-            f"<option value='{html_lib.escape(s.code)}'>{html_lib.escape(s.code)} — {html_lib.escape(s.name)}</option>"
-            for s in stations
+            f"<option value='{html_lib.escape(c.code)}'>{html_lib.escape(c.code)} — {html_lib.escape(c.name)}</option>"
+            for c in consoles
         ]
     )
     body = (
@@ -1687,12 +1703,12 @@ def rental_catalog_page(db: Session = Depends(get_db)):
         "</header>"
         "<main class='cp-client-main cp-wrap'>"
         "<h1>Location console / matériel</h1>"
-        "<p class='cp-client-lead'>Paiement séparé des <strong>forfaits temps de jeu</strong> sur poste (QR station). "
-        "Choisissez un forfait, le lieu de retrait, puis payez.</p>"
+        "<p class='cp-client-lead'>Catalogue <strong>location ControlPlay</strong> (indépendant des salles de jeu / QR). "
+        "Choisissez un forfait et une console de retrait.</p>"
         "<form method='post' action='/rental/checkout' class='cp-offer-card' style='max-width:520px'>"
         "<div class='cp-form-row' style='flex-direction:column;align-items:stretch'>"
         "<label>Forfait<select name='rental_plan_id' required>" + plan_options + "</select></label>"
-        "<label>Point de retrait (station)<select name='station_code' required>" + station_options + "</select></label>"
+        "<label>Console de retrait<select name='console_code' required>" + console_options + "</select></label>"
         "<label>Email<input type='email' name='email' placeholder='optionnel' autocomplete='email'/></label>"
         "<label class='cp-form-connect'><input type='checkbox' name='connect' value='1'/> "
         "Lier un compte (téléphone requis)</label>"
@@ -1709,7 +1725,7 @@ def rental_catalog_page(db: Session = Depends(get_db)):
 @app.post("/rental/checkout")
 def rental_checkout(
     rental_plan_id: int = Form(...),
-    station_code: str = Form(...),
+    console_code: str = Form(...),
     connect: str = Form("0"),
     email: str = Form(""),
     phone: str = Form(""),
@@ -1720,10 +1736,10 @@ def rental_checkout(
         .filter(RentalPlan.id == rental_plan_id, RentalPlan.is_active.is_(True))
         .first()
     )
-    station = db.query(Station).filter(Station.code == station_code.strip()).first()
-    if not plan or not station or not station.is_active:
-        raise HTTPException(status_code=404, detail="Forfait ou station introuvable")
-    if plan.station_id is not None and plan.station_id != station.id:
+    console = db.query(RentalConsole).filter(RentalConsole.code == console_code.strip()).first()
+    if not plan or not console or not console.is_active:
+        raise HTTPException(status_code=404, detail="Forfait ou console location introuvable")
+    if plan.rental_console_id is not None and plan.rental_console_id != console.id:
         raise HTTPException(status_code=400, detail="Ce forfait n'est pas disponible sur ce point de retrait")
 
     if connect == "1":
@@ -1742,7 +1758,7 @@ def rental_checkout(
         reference = make_payment_reference(chosen_sim_provider)
         order = RentalOrder(
             rental_plan_id=plan.id,
-            station_id=station.id,
+            rental_console_id=console.id,
             user_id=user.id,
             payment_provider=chosen_sim_provider,
             payment_reference=reference,
@@ -1757,7 +1773,6 @@ def rental_checkout(
         log_event(
             db,
             f"Location checkout (simulation) {reference} ({chosen_sim_provider})",
-            station_id=station.id,
         )
         email_query = customer_email or ""
         return RedirectResponse(
@@ -1777,7 +1792,7 @@ def rental_checkout(
             )
             order = RentalOrder(
                 rental_plan_id=plan.id,
-                station_id=station.id,
+                rental_console_id=console.id,
                 user_id=user.id,
                 payment_provider="paystack",
                 payment_reference=reference,
@@ -1789,14 +1804,13 @@ def rental_checkout(
             db.add(order)
             db.commit()
             db.refresh(order)
-            log_event(db, f"Location Paystack init {reference}", station_id=station.id)
+            log_event(db, f"Location Paystack init {reference}")
             return RedirectResponse(url=authorization_url, status_code=303)
         except Exception as e:
             log_event(
                 db,
                 f"Location Paystack init echoue: {e}",
                 level="warning",
-                station_id=station.id,
             )
 
     if is_cinetpay_configured():
@@ -1808,7 +1822,7 @@ def rental_checkout(
         )
         order = RentalOrder(
             rental_plan_id=plan.id,
-            station_id=station.id,
+            rental_console_id=console.id,
             user_id=user.id,
             payment_provider="cinetpay",
             payment_reference=reference,
@@ -1820,14 +1834,14 @@ def rental_checkout(
         db.add(order)
         db.commit()
         db.refresh(order)
-        log_event(db, f"Location CinetPay init {reference}", station_id=station.id)
+        log_event(db, f"Location CinetPay init {reference}")
         return RedirectResponse(url=payment_url, status_code=303)
 
     chosen_sim_provider = "paystack" if paystack_enabled() else "cinetpay"
     reference = make_payment_reference(chosen_sim_provider)
     order = RentalOrder(
         rental_plan_id=plan.id,
-        station_id=station.id,
+        rental_console_id=console.id,
         user_id=user.id,
         payment_provider=chosen_sim_provider,
         payment_reference=reference,
@@ -2497,7 +2511,6 @@ async def cinetpay_webhook(request: Request, db: Session = Depends(get_db)):
                 db,
                 f"CinetPay status {payment_status}: location echouee pour {reference}",
                 level="warning",
-                station_id=rental_order.station_id,
             )
         return {"ok": True}
 

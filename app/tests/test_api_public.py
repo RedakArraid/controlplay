@@ -54,6 +54,7 @@ def test_public_stations_returns_shape(client: TestClient) -> None:
     assert isinstance(data["stations"], list)
     for s in data["stations"]:
         assert "id" in s and "code" in s and "name" in s
+        assert s.get("usage_kind") == "game_room"
         assert "tv_size_inches" in s
         assert "console_model" in s
         assert "vr_headset_model" in s

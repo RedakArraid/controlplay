@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/ui/Button'
@@ -40,7 +40,7 @@ export function Offers() {
     return Number.isFinite(n) ? n : null
   }
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const d = await apiGet<{ offers: Row[] }>('/admin/offers')
     setRows(d.offers)
     const nextEdit: typeof editForm = {}
@@ -53,11 +53,11 @@ export function Offers() {
       }
     })
     setEditForm(nextEdit)
-  }
+  }, [])
 
   useEffect(() => {
     reload().catch((e) => setErr(e instanceof Error ? e.message : 'Erreur'))
-  }, [])
+  }, [reload])
 
   async function create(e: React.FormEvent) {
     e.preventDefault()

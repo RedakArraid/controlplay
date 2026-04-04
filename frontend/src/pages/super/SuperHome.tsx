@@ -38,6 +38,24 @@ export function SuperHome() {
   }
   if (canOps) {
     tiles.push({
+      to: '/admin/stations',
+      title: 'Consoles / stations',
+      desc: 'Ajouter et configurer les stations comme dans l’admin.',
+      icon: LayoutDashboard,
+    })
+    tiles.push({
+      to: '/admin/offers',
+      title: 'Jeux / offres',
+      desc: 'Créer les offres de jeu (durée, prix) comme dans l’admin.',
+      icon: LayoutDashboard,
+    })
+    tiles.push({
+      to: '/admin/rental-plans',
+      title: 'Prix de location',
+      desc: 'Gérer les forfaits de location console.',
+      icon: LayoutDashboard,
+    })
+    tiles.push({
       to: '/admin/dashboard',
       title: 'Dashboard stations',
       desc: 'Vue opérationnelle du parc (menu admin).',

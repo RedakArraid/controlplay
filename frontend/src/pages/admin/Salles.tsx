@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/ui/Button'
@@ -24,7 +24,7 @@ export function Salles() {
   })
   const [editForm, setEditForm] = useState<Record<number, typeof newForm>>({})
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const d = await apiGet<{ salles: Row[] }>('/admin/salles')
     setRows(d.salles)
     const nextEdit: Record<number, typeof newForm> = {}
@@ -37,11 +37,11 @@ export function Salles() {
       }
     })
     setEditForm(nextEdit)
-  }
+  }, [])
 
   useEffect(() => {
     reload().catch((e) => setErr(e instanceof Error ? e.message : 'Erreur'))
-  }, [])
+  }, [reload])
 
   function parseNum(v: string): number | null {
     const t = v.trim()
