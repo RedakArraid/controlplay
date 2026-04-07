@@ -6,7 +6,7 @@ Les handlers importent `main` en différé pour éviter les imports circulaires.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -638,7 +638,7 @@ def api_dashboard_summary(request: Request, db: Session = Depends(get_db)):
     m = _lazy()
     uid = m.get_authenticated_admin_user_id(request, db)
     full_ops = m.has_platform_operations_scope(db, uid)
-    now = datetime.utcnow().replace(microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0)
     paystack_flag = m.paystack_enabled()
     cinetpay_flag = m.cinetpay_enabled()
 
@@ -2149,7 +2149,7 @@ def api_admin_feedback_set_status(
         raise HTTPException(status_code=400, detail="Statut invalide")
     row.status = new_status
     row.handled_by_user_id = uid
-    row.handled_at = datetime.utcnow()
+    row.handled_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"ok": True}
 
@@ -2421,7 +2421,7 @@ def api_super_admin_bulk_set_user_status(
 
     for u in users:
         u.is_active = bool(body.is_active)
-        u.updated_at = datetime.utcnow()
+        u.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"ok": True, "updated": len(users)}
 
@@ -2455,7 +2455,7 @@ def api_super_admin_bulk_password_reset(
     for u in users:
         plain = secrets.token_urlsafe(12)
         u.password_hash = m.hash_password(plain)
-        u.updated_at = datetime.utcnow()
+        u.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         results.append(
             {
                 "user_id": u.id,
@@ -2499,7 +2499,7 @@ def api_super_admin_update_user(
     target.is_active = bool(body.is_active)
     if body.password is not None and body.password.strip():
         target.password_hash = m.hash_password(body.password.strip())
-    target.updated_at = datetime.utcnow()
+    target.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     try:
         db.commit()
     except IntegrityError as e:

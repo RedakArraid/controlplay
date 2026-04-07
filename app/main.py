@@ -8,7 +8,7 @@ import secrets
 from pathlib import Path
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -910,7 +910,7 @@ def get_active_session_by_station(db: Session, station_id: int) -> GameSession |
 
 
 def extend_session_end_at(db: Session, session: GameSession, extra_minutes: int, source: str) -> None:
-    now = datetime.utcnow().replace(microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0)
     # Si une extension est demandée alors que end_at est déjà passé (edge case),
     # on base le nouveau end_at sur maintenant.
     base_end = session.end_at if session.end_at and session.end_at > now else now
@@ -3485,7 +3485,7 @@ def super_admin_providers(
 def admin_dashboard(db: Session = Depends(get_db), _: str = Depends(require_config_admin)):
     user_id = int(_)
     super_admin = is_global_super_admin(db, user_id)
-    now = datetime.utcnow().replace(microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0)
 
     paystack_flag = paystack_enabled()
     cinetpay_flag = cinetpay_enabled()
@@ -5398,7 +5398,7 @@ def admin_extend_session(
     if not session_station_allowed_for_user(db, user_id, session.station_id):
         raise HTTPException(status_code=403, detail="Accès refusé")
 
-    now = datetime.utcnow().replace(microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0)
     base_end = session.end_at if session.end_at and session.end_at > now else now
     new_end = base_end + timedelta(minutes=minutes)
     if new_end < now + timedelta(minutes=1):
@@ -5468,7 +5468,7 @@ def admin_resume_session(
     session.status = "active"
     db.add(session)
     db.commit()
-    now = datetime.utcnow().replace(microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0)
     if session.end_at and session.end_at > now:
         remaining_s = max(0, int((session.end_at - now).total_seconds()))
         deactivate_session.apply_async(args=[session.id], countdown=remaining_s)
@@ -5486,4 +5486,4 @@ def admin_resume_session(
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "time": datetime.utcnow().isoformat(), "delta": timedelta(seconds=0).total_seconds()}
+    return {"status": "ok", "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "delta": timedelta(seconds=0).total_seconds()}
