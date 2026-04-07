@@ -1,29 +1,34 @@
-import type { HTMLAttributes } from 'react'
 import { cn } from '../lib/cn'
 
-type Tone = 'default' | 'ok' | 'warn' | 'bad' | 'muted'
+type Tone = 'ok' | 'warn' | 'bad' | 'muted' | 'info' | 'default'
 
-const tones: Record<Tone, string> = {
-  default: 'bg-cp-accent/15 text-cp-accent border-cp-accent/30',
+const toneClasses: Record<Tone, string> = {
   ok: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  warn: 'bg-amber-500/15 text-amber-200 border-amber-500/30',
-  bad: 'bg-rose-500/15 text-rose-200 border-rose-500/30',
-  muted: 'bg-white/5 text-cp-muted border-cp-border',
+  warn: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  bad: 'bg-red-500/15 text-red-300 border-red-500/30',
+  muted: 'bg-white/5 text-cp-muted border-white/10',
+  info: 'bg-cp-cyan/10 text-cp-cyan border-cp-cyan/30',
+  default: 'bg-cp-accent/10 text-cp-accent border-cp-accent/30',
 }
 
 export function Badge({
+  tone = 'muted',
+  children,
   className,
-  tone = 'default',
-  ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone?: Tone }) {
+}: {
+  tone?: Tone
+  children: React.ReactNode
+  className?: string
+}) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-lg border px-2 py-0.5 text-xs font-medium',
-        tones[tone],
+        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
+        toneClasses[tone],
         className,
       )}
-      {...props}
-    />
+    >
+      {children}
+    </span>
   )
 }

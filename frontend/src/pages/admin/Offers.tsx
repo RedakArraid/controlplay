@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { PageHeader } from '../../components/PageHeader'
-import { Card } from '../../components/Card'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
+
+import { Modal } from '../../components/ui/Modal'
+import { SkeletonTable } from '../../components/ui/Skeleton'
+import { useToast } from '../../contexts/ToastContext'
 import { apiGet, ApiError } from '../../lib/api'
+import { Plus, Pencil, RefreshCw, Tag, Clock } from 'lucide-react'
 
 type Row = {
   id: number
@@ -10,302 +15,333 @@ type Row = {
   duration_minutes: number
   price_xof: number
   provider: string
-  stations_n: number
-  salles_n: number
+  is_active: boolean
+}
+
+type FormShape = {
+  name: string
+  duration_minutes: string
+  price_xof: string
+  is_active: boolean
+}
+
+const emptyForm = (): FormShape => ({
+  name: '',
+  duration_minutes: '',
+  price_xof: '',
+  is_active: true,
+})
+
+function rowToForm(r: Row): FormShape {
+  return {
+    name: r.name,
+    duration_minutes: String(r.duration_minutes),
+    price_xof: String(r.price_xof),
+    is_active: r.is_active,
+  }
+}
+
+function formatDuration(min: number): string {
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `${h}h` : `${h}h${m}`
 }
 
 export function Offers() {
+  const { success, error: toastError } = useToast()
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [saving, setSaving] = useState<number | 'new' | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const [newForm, setNewForm] = useState({
-    name: '',
-    duration_minutes: '15',
-    price_xof: '100',
-    is_active: true,
-  })
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editRow, setEditRow] = useState<Row | null>(null)
+  const [form, setForm] = useState<FormShape>(emptyForm())
+  const [editForm, setEditForm] = useState<FormShape>(emptyForm())
 
-  const [editForm, setEditForm] = useState<
-    Record<
-      number,
-      { name: string; duration_minutes: string; price_xof: string; is_active: boolean }
-    >
-  >({})
-
-  function toIntOrNull(v: string): number | null {
-    const t = v.trim()
-    if (!t) return null
-    const n = Number(t)
-    return Number.isFinite(n) ? n : null
-  }
-
-  const reload = useCallback(async () => {
-    const d = await apiGet<{ offers: Row[] }>('/admin/offers')
-    setRows(d.offers)
-    const nextEdit: typeof editForm = {}
-    d.offers.forEach((o) => {
-      nextEdit[o.id] = {
-        name: o.name,
-        duration_minutes: String(o.duration_minutes),
-        price_xof: String(o.price_xof),
-        is_active: true,
+  const reload = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true)
+      else setRefreshing(true)
+      try {
+        const d = await apiGet<{ offers: Row[] }>('/admin/offers')
+        setRows(d.offers)
+      } catch (e) {
+        toastError('Chargement échoué', e instanceof Error ? e.message : 'Erreur')
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
       }
-    })
-    setEditForm(nextEdit)
-  }, [])
+    },
+    [toastError],
+  )
 
   useEffect(() => {
-    reload().catch((e) => setErr(e instanceof Error ? e.message : 'Erreur'))
+    reload()
   }, [reload])
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
-    setSaving('new')
-    try {
-      const duration = toIntOrNull(newForm.duration_minutes)
-      const price = toIntOrNull(newForm.price_xof)
-      if (duration == null || price == null) throw new Error('Durée/prix invalide')
+  const buildPayload = (f: FormShape) => ({
+    name: f.name.trim(),
+    duration_minutes: parseInt(f.duration_minutes) || 0,
+    price_xof: parseInt(f.price_xof) || 0,
+    is_active: f.is_active,
+  })
 
+  const handleCreate = async () => {
+    setSaving(true)
+    try {
       const r = await fetch('/api/admin/offers', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newForm.name.trim(),
-          duration_minutes: duration,
-          price_xof: price,
-          is_active: newForm.is_active,
-        }),
+        body: JSON.stringify(buildPayload(form)),
       })
-      if (!r.ok) {
-        const msg = await r.text()
-        throw new ApiError(msg || 'Erreur', r.status)
-      }
-      setNewForm({ name: '', duration_minutes: '15', price_xof: '100', is_active: true })
-      await reload()
+      if (!r.ok) throw new ApiError(await r.text(), r.status)
+      success('Offre créée', `L'offre « ${form.name} » a été créée.`)
+      setCreateOpen(false)
+      setForm(emptyForm())
+      await reload(true)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur')
+      toastError('Création échouée', e instanceof Error ? e.message : 'Erreur')
     } finally {
-      setSaving(null)
+      setSaving(false)
     }
   }
 
-  async function update(e: React.FormEvent, id: number) {
-    e.preventDefault()
-    const f = editForm[id]
-    if (!f) return
-    setErr(null)
-    setSaving(id)
+  const handleUpdate = async () => {
+    if (!editRow) return
+    setSaving(true)
     try {
-      const duration = toIntOrNull(f.duration_minutes)
-      const price = toIntOrNull(f.price_xof)
-      if (duration == null || price == null) throw new Error('Durée/prix invalide')
-
-      const r = await fetch(`/api/admin/offers/${id}`, {
+      const r = await fetch(`/api/admin/offers/${editRow.id}`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: f.name.trim(),
-          duration_minutes: duration,
-          price_xof: price,
-          is_active: f.is_active,
-        }),
+        body: JSON.stringify(buildPayload(editForm)),
       })
-      if (!r.ok) {
-        const msg = await r.text()
-        throw new ApiError(msg || 'Erreur', r.status)
-      }
-      await reload()
+      if (!r.ok) throw new ApiError(await r.text(), r.status)
+      success('Offre mise à jour')
+      setEditRow(null)
+      await reload(true)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur')
+      toastError('Mise à jour échouée', e instanceof Error ? e.message : 'Erreur')
     } finally {
-      setSaving(null)
+      setSaving(false)
     }
   }
 
-  async function del(id: number) {
-    if (!confirm('Désactiver cette offre ?')) return
-    setErr(null)
-    setSaving(id)
-    try {
-      const r = await fetch(`/api/admin/offers/${id}/delete`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      if (!r.ok) {
-        const msg = await r.text()
-        throw new ApiError(msg || 'Erreur', r.status)
-      }
-      await reload()
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setSaving(null)
-    }
-  }
+  const OfferForm = ({ f, setF }: { f: FormShape; setF: (v: FormShape) => void }) => (
+    <div className="space-y-4">
+      <Input
+        label="Nom de l'offre *"
+        value={f.name}
+        onChange={(e) => setF({ ...f, name: e.target.value })}
+        placeholder="ex: Session 1h"
+        required
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input
+          label="Durée (minutes) *"
+          type="number"
+          min="1"
+          value={f.duration_minutes}
+          onChange={(e) => setF({ ...f, duration_minutes: e.target.value })}
+          placeholder="60"
+          helper={
+            f.duration_minutes
+              ? `→ ${formatDuration(parseInt(f.duration_minutes) || 0)}`
+              : undefined
+          }
+          required
+        />
+        <Input
+          label="Prix (XOF) *"
+          type="number"
+          min="0"
+          value={f.price_xof}
+          onChange={(e) => setF({ ...f, price_xof: e.target.value })}
+          placeholder="1000"
+          helper={
+            f.price_xof
+              ? `${parseInt(f.price_xof).toLocaleString('fr-FR')} XOF`
+              : undefined
+          }
+          required
+        />
+      </div>
+      {/* Preview card */}
+      {f.name && f.duration_minutes && f.price_xof && (
+        <div className="rounded-2xl border border-cp-cyan/20 bg-cp-cyan/5 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-cp-cyan">Aperçu</p>
+          <p className="mt-2 font-display text-lg font-bold">
+            {formatDuration(parseInt(f.duration_minutes) || 0)}
+          </p>
+          <p className="text-sm text-cp-muted">{f.name}</p>
+          <p className="mt-1 font-display text-xl font-bold">
+            {parseInt(f.price_xof).toLocaleString('fr-FR')}{' '}
+            <span className="text-sm font-normal text-cp-muted">XOF</span>
+          </p>
+        </div>
+      )}
+      <label className="flex cursor-pointer items-center gap-3">
+        <div className="relative">
+          <input
+            type="checkbox"
+            checked={f.is_active}
+            onChange={(e) => setF({ ...f, is_active: e.target.checked })}
+            className="sr-only"
+          />
+          <div
+            className={`h-5 w-9 rounded-full transition ${f.is_active ? 'bg-cp-cyan' : 'bg-white/10'}`}
+          >
+            <div
+              className={`mt-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${f.is_active ? 'translate-x-4' : 'translate-x-0.5'}`}
+            />
+          </div>
+        </div>
+        <span className="text-sm text-cp-muted">Offre active</span>
+      </label>
+    </div>
+  )
 
   return (
-    <>
-      <PageHeader
-        title="Offres"
-        description="Offres templates (durée / prix). Edition en SPA via endpoints JSON."
-      />
-      {err ? <p className="text-rose-300">{err}</p> : null}
-      {!rows ? (
-        <p className="text-cp-muted">Chargement…</p>
-      ) : (
-        <>
-          <Card className="mb-6">
-            <h2 className="mb-4 text-base font-semibold">Créer une offre</h2>
-            <form className="grid gap-3 md:grid-cols-5" onSubmit={create}>
-              <input
-                required
-                placeholder="Nom offre"
-                value={newForm.name}
-                onChange={(e) => setNewForm((s) => ({ ...s, name: e.target.value }))}
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
-              />
-              <input
-                required
-                inputMode="numeric"
-                placeholder="Durée minutes"
-                value={newForm.duration_minutes}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, duration_minutes: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
-              />
-              <input
-                required
-                inputMode="numeric"
-                placeholder="Prix XOF"
-                value={newForm.price_xof}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, price_xof: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
-              />
-              <label className="flex items-center gap-2 text-sm text-cp-muted md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={newForm.is_active}
-                  onChange={(e) => setNewForm((s) => ({ ...s, is_active: e.target.checked }))}
-                />
-                Active
-              </label>
-              <div className="md:col-span-5">
-                <Button type="submit" disabled={saving === 'new'}>
-                  {saving === 'new' ? 'Création…' : 'Créer'}
-                </Button>
-              </div>
-            </form>
-          </Card>
+    <div className="animate-fadeIn">
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Offres</h1>
+          <p className="mt-1 text-sm text-cp-muted">
+            Créneaux de temps de jeu avec leur tarif.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => reload(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-cp-muted transition hover:bg-white/10 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <Button
+            onClick={() => {
+              setForm(emptyForm())
+              setCreateOpen(true)
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Nouvelle offre
+          </Button>
+        </div>
+      </div>
 
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[900px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted">
-                <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3">Nom</th>
-                <th className="px-4 py-3">Durée</th>
-                <th className="px-4 py-3">Prix</th>
-                <th className="px-4 py-3">PSP</th>
-                <th className="px-4 py-3">Stations</th>
-                <th className="px-4 py-3">Salles</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-b border-white/5 hover:bg-white/[0.03]"
-                >
-                  <td className="px-4 py-3 font-mono text-xs">{r.id}</td>
-                  <td className="px-4 py-3">
-                    <input
-                      value={editForm[r.id]?.name ?? ''}
-                      onChange={(e) =>
-                        setEditForm((s) => ({
-                          ...s,
-                          [r.id]: { ...s[r.id], name: e.target.value },
-                        }))
-                      }
-                      className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-sm"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      value={editForm[r.id]?.duration_minutes ?? ''}
-                      onChange={(e) =>
-                        setEditForm((s) => ({
-                          ...s,
-                          [r.id]: { ...s[r.id], duration_minutes: e.target.value },
-                        }))
-                      }
-                      className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-sm font-mono"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      value={editForm[r.id]?.price_xof ?? ''}
-                      onChange={(e) =>
-                        setEditForm((s) => ({
-                          ...s,
-                          [r.id]: { ...s[r.id], price_xof: e.target.value },
-                        }))
-                      }
-                      className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-sm font-mono"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-cp-muted">
-                    {r.provider || '—'}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{r.stations_n}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{r.salles_n}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <form onSubmit={(e) => update(e, r.id)}>
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 text-xs text-cp-muted">
-                            <input
-                              type="checkbox"
-                              checked={editForm[r.id]?.is_active ?? true}
-                              onChange={(e) =>
-                                setEditForm((s) => ({
-                                  ...s,
-                                  [r.id]: { ...s[r.id], is_active: e.target.checked },
-                                }))
-                              }
-                            />
-                            Active
-                          </label>
-                          <Button type="submit" variant="secondary" disabled={saving === r.id}>
-                            {saving === r.id ? '…' : 'Enregistrer'}
-                          </Button>
-                        </div>
-                      </form>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        disabled={saving === r.id}
-                        className="px-3 py-2"
-                        onClick={() => del(r.id)}
-                      >
-                        Désactiver
-                      </Button>
-                    </div>
-                  </td>
+      {loading ? (
+        <SkeletonTable rows={5} cols={5} />
+      ) : (
+        <div className="glass-panel overflow-hidden rounded-2xl border border-white/5">
+          {!rows || rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Tag className="mb-4 h-12 w-12 text-cp-muted/50" />
+              <p className="font-semibold">Aucune offre configurée</p>
+              <p className="mt-2 max-w-xs text-sm text-cp-muted">
+                Créez des offres (durée + tarif) à attacher aux stations.
+              </p>
+              <Button className="mt-5" onClick={() => setCreateOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Créer une offre
+              </Button>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/5 text-xs uppercase tracking-wider text-cp-muted">
+                  <th className="px-5 py-3">Offre</th>
+                  <th className="px-5 py-3">Durée</th>
+                  <th className="px-5 py-3">Prix</th>
+                  <th className="px-5 py-3">Statut</th>
+                  <th className="px-5 py-3">Actions</th>
                 </tr>
-              ))}
-            </tbody>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr
+                    key={r.id}
+                    className="border-b border-white/5 transition hover:bg-white/[0.03] animate-fadeIn"
+                    style={{ animationDelay: `${i * 0.025}s` }}
+                  >
+                    <td className="px-5 py-3.5">
+                      <p className="font-medium">{r.name}</p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="flex items-center gap-1.5 text-sm">
+                        <Clock className="h-3.5 w-3.5 text-cp-muted" />
+                        {formatDuration(r.duration_minutes)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="font-display font-semibold">
+                        {r.price_xof.toLocaleString('fr-FR')}
+                      </span>
+                      <span className="ml-1 text-xs text-cp-muted">XOF</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge tone={r.is_active ? 'ok' : 'muted'}>
+                        {r.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <button
+                        onClick={() => {
+                          setEditRow(r)
+                          setEditForm(rowToForm(r))
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-cp-muted transition hover:bg-white/10 hover:text-cp-text"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Modifier
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
-          </Card>
-        </>
+          )}
+        </div>
       )}
-    </>
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Créer une offre"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleCreate} disabled={saving}>
+              {saving ? 'Création…' : 'Créer'}
+            </Button>
+          </>
+        }
+      >
+        <OfferForm f={form} setF={setForm} />
+      </Modal>
+
+      <Modal
+        open={!!editRow}
+        onClose={() => setEditRow(null)}
+        title={`Modifier : ${editRow?.name ?? ''}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditRow(null)}>
+              Annuler
+            </Button>
+            <Button onClick={handleUpdate} disabled={saving}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </>
+        }
+      >
+        <OfferForm f={editForm} setF={setEditForm} />
+      </Modal>
+    </div>
   )
 }

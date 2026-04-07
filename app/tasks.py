@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
@@ -64,7 +64,7 @@ def activate_session(session_id: int) -> None:
                     session_id=session.id,
                 )
             )
-        now = datetime.utcnow().replace(microsecond=0)
+        now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
         session.status = "active"
         session.payment_status = "paid"
         session.started_at = now
@@ -96,7 +96,7 @@ def deactivate_session(session_id: int) -> None:
         session = db.query(GameSession).filter(GameSession.id == session_id).first()
         if not session or session.status != "active":
             return
-        now = datetime.utcnow().replace(microsecond=0)
+        now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
         # Si une extension a été ajoutée, end_at peut être dans le futur.
         # On ne bascule HDMI1 que quand la session est réellement expirée.
         if session.end_at and session.end_at > now:

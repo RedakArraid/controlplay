@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
-import { PageHeader } from '../../components/PageHeader'
-import { Card } from '../../components/Card'
+import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
+import { Select } from '../../components/ui/Select'
+import { Modal } from '../../components/ui/Modal'
+import { SkeletonTable } from '../../components/ui/Skeleton'
+import { useToast } from '../../contexts/ToastContext'
 import { apiGet, ApiError } from '../../lib/api'
+import { Plus, Pencil, ExternalLink, QrCode, RefreshCw } from 'lucide-react'
 
 type Row = {
   id: number
@@ -61,83 +66,80 @@ function rowToForm(st: Row): FormShape {
   }
 }
 
-export function Stations() {
-  const [rows, setRows] = useState<Row[] | null>(null)
-  const [salles, setSalles] = useState<{ id: number; code: string; name: string }[]>(
-    [],
-  )
-  const [err, setErr] = useState<string | null>(null)
-  const [saving, setSaving] = useState<number | 'new' | null>(null)
+function parseNullableInt(v: string): number | null {
+  const t = v.trim()
+  if (!t) return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
 
-  const [newForm, setNewForm] = useState<FormShape>(() => emptyForm())
-
-  const [editForm, setEditForm] = useState<Record<number, FormShape>>({})
-
-  function parseNullableInt(v: string): number | null {
-    const t = v.trim()
-    if (!t) return null
-    const n = Number(t)
-    return Number.isFinite(n) ? n : null
+function payloadFromForm(f: FormShape) {
+  return {
+    code: f.code.trim(),
+    name: f.name.trim(),
+    broadlink_ip: f.broadlink_ip.trim() || null,
+    usage_kind: 'game_room' as const,
+    salle_code: f.salle_code.trim() || null,
+    tv_size_inches: parseNullableInt(f.tv_size_inches),
+    console_model: f.console_model.trim() || null,
+    vr_headset_model: f.vr_headset_model.trim() || null,
+    controller_count: parseNullableInt(f.controller_count),
+    bundled_games: f.bundled_games.trim() || null,
+    ir_code_hdmi1: null,
+    ir_code_hdmi2: null,
+    is_active: f.is_active,
   }
+}
+
+export function Stations() {
+  const { success, error: toastError } = useToast()
+  const [rows, setRows] = useState<Row[] | null>(null)
+  const [salles, setSalles] = useState<{ id: number; code: string; name: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Modals
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editRow, setEditRow] = useState<Row | null>(null)
+
+  // Forms
+  const [newForm, setNewForm] = useState<FormShape>(emptyForm)
+  const [editForm, setEditForm] = useState<FormShape>(emptyForm)
+
+  const reload = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
+    try {
+      const [s1, s2] = await Promise.all([
+        apiGet<{ stations: Row[] }>('/admin/stations'),
+        apiGet<{ salles: { id: number; code: string; name: string }[] }>('/admin/salles'),
+      ])
+      setRows(s1.stations)
+      setSalles(s2.salles)
+    } catch (e) {
+      toastError('Chargement échoué', e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [toastError])
 
   useEffect(() => {
-    ;(async () => {
-      try {
-        const [s1, s2] = await Promise.all([
-          apiGet<{ stations: Row[] }>('/admin/stations'),
-          apiGet<{ salles: { id: number; code: string; name: string }[] }>(
-            '/admin/salles',
-          ),
-        ])
-        setRows(s1.stations)
-        setSalles(s2.salles)
-        const nextEdit: Record<number, FormShape> = {}
-        s1.stations.forEach((st) => {
-          nextEdit[st.id] = rowToForm(st)
-        })
-        setEditForm(nextEdit)
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : 'Erreur')
-      }
-    })()
-  }, [])
+    reload()
+  }, [reload])
 
-  async function reload() {
-    const d = await apiGet<{ stations: Row[] }>('/admin/stations')
-    setRows(d.stations)
-    const nextEdit: Record<number, FormShape> = {}
-    d.stations.forEach((st) => {
-      nextEdit[st.id] = rowToForm(st)
-    })
-    setEditForm(nextEdit)
+  const openEdit = (row: Row) => {
+    setEditRow(row)
+    setEditForm(rowToForm(row))
   }
 
-  function payloadFromForm(f: FormShape) {
-    return {
-      code: f.code.trim(),
-      name: f.name.trim(),
-      broadlink_ip: f.broadlink_ip.trim() || null,
-      usage_kind: 'game_room' as const,
-      salle_code: f.salle_code.trim() || null,
-      tv_size_inches: parseNullableInt(f.tv_size_inches),
-      console_model: f.console_model.trim() || null,
-      vr_headset_model: f.vr_headset_model.trim() || null,
-      controller_count: parseNullableInt(f.controller_count),
-      bundled_games: f.bundled_games.trim() || null,
-      ir_code_hdmi1: null,
-      ir_code_hdmi2: null,
-      is_active: f.is_active,
-    }
-  }
-
-  async function createStation(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
+  const handleCreate = async () => {
     if (!newForm.broadlink_ip.trim()) {
-      setErr('Broadlink IP obligatoire pour une station « salle de jeu ».')
+      toastError('Broadlink IP obligatoire', 'Renseignez l\'adresse IP Broadlink pour cette station.')
       return
     }
-    setSaving('new')
+    setSaving(true)
     try {
       const r = await fetch('/api/admin/stations', {
         method: 'POST',
@@ -149,370 +151,311 @@ export function Stations() {
         const msg = await r.text()
         throw new ApiError(msg || 'Erreur', r.status)
       }
+      success('Station créée', `La station « ${newForm.name} » a été créée.`)
+      setCreateOpen(false)
       setNewForm(emptyForm())
-      await reload()
+      await reload(true)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur')
+      toastError('Création échouée', e instanceof Error ? e.message : 'Erreur')
     } finally {
-      setSaving(null)
+      setSaving(false)
     }
   }
 
-  async function updateStation(e: React.FormEvent, id: number) {
-    e.preventDefault()
-    const f = editForm[id]
-    if (!f) return
-    setErr(null)
-    if (!f.broadlink_ip.trim()) {
-      setErr('Broadlink IP obligatoire pour une station « salle de jeu ».')
+  const handleUpdate = async () => {
+    if (!editRow) return
+    if (!editForm.broadlink_ip.trim()) {
+      toastError('Broadlink IP obligatoire', 'Renseignez l\'adresse IP Broadlink pour cette station.')
       return
     }
-    setSaving(id)
+    setSaving(true)
     try {
-      const r = await fetch(`/api/admin/stations/${id}`, {
+      const r = await fetch(`/api/admin/stations/${editRow.id}`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadFromForm(f)),
+        body: JSON.stringify(payloadFromForm(editForm)),
       })
       if (!r.ok) {
         const msg = await r.text()
         throw new ApiError(msg || 'Erreur', r.status)
       }
-      await reload()
+      success('Station mise à jour', `La station « ${editForm.name} » a été enregistrée.`)
+      setEditRow(null)
+      await reload(true)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur')
+      toastError('Mise à jour échouée', e instanceof Error ? e.message : 'Erreur')
     } finally {
-      setSaving(null)
+      setSaving(false)
     }
   }
 
-  return (
-    <>
-      <PageHeader
-        title="Stations"
-        description="Postes « salle de jeu » partenaires : QR, temps de jeu et pilotage Broadlink. Le parc location se gère dans Consoles location / Jeux location / Forfaits location."
+  const StationForm = ({
+    form,
+    setForm,
+  }: {
+    form: FormShape
+    setForm: (f: FormShape) => void
+  }) => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Input
+        label="Code unique *"
+        value={form.code}
+        onChange={(e) => setForm({ ...form, code: e.target.value })}
+        placeholder="ex: ST-001"
+        className="font-mono"
+        required
       />
-      {err ? <p className="text-rose-300">{err}</p> : null}
-      {!rows ? (
-        <p className="text-cp-muted">Chargement…</p>
-      ) : (
-        <>
-          <Card className="mb-6">
-            <h2 className="mb-4 text-base font-semibold">Créer une station</h2>
-            <form className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" onSubmit={createStation}>
-              <input
-                required
-                placeholder="Code unique"
-                value={newForm.code}
-                onChange={(e) => setNewForm((s) => ({ ...s, code: e.target.value }))}
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
-              />
-              <input
-                required
-                placeholder="Nom affiché"
-                value={newForm.name}
-                onChange={(e) => setNewForm((s) => ({ ...s, name: e.target.value }))}
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
-              />
-              <input
-                required
-                placeholder="Broadlink IP *"
-                value={newForm.broadlink_ip}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, broadlink_ip: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
-              />
-              <input
-                placeholder="TV pouces"
-                value={newForm.tv_size_inches}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, tv_size_inches: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
-              />
-              <input
-                placeholder="Console (ex: PS5, Switch…)"
-                value={newForm.console_model}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, console_model: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
-              />
-              <input
-                placeholder="Casque VR (optionnel)"
-                value={newForm.vr_headset_model}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, vr_headset_model: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm"
-              />
-              <input
-                placeholder="Nombre de manettes"
-                value={newForm.controller_count}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, controller_count: e.target.value }))
-                }
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm font-mono"
-              />
-              <textarea
-                placeholder="Jeux installés / notes (texte libre)"
-                value={newForm.bundled_games}
-                onChange={(e) =>
-                  setNewForm((s) => ({ ...s, bundled_games: e.target.value }))
-                }
-                rows={2}
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm lg:col-span-3"
-              />
-              <select
-                value={newForm.salle_code}
-                onChange={(e) => setNewForm((s) => ({ ...s, salle_code: e.target.value }))}
-                className="rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2 text-sm lg:col-span-3"
-              >
-                <option value="">(sans salle)</option>
-                {salles.map((s) => (
-                  <option key={s.id} value={s.code}>
-                    {s.code} — {s.name}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-2 text-sm text-cp-muted lg:col-span-3">
-                <input
-                  type="checkbox"
-                  checked={newForm.is_active}
-                  onChange={(e) => setNewForm((s) => ({ ...s, is_active: e.target.checked }))}
-                />
-                Active
-              </label>
-              <div className="lg:col-span-3">
-                <Button type="submit" disabled={saving === 'new'}>
-                  {saving === 'new' ? 'Création…' : 'Créer la station'}
-                </Button>
-              </div>
-            </form>
-          </Card>
+      <Input
+        label="Nom affiché *"
+        value={form.name}
+        onChange={(e) => setForm({ ...form, name: e.target.value })}
+        placeholder="ex: Station VR 1"
+        required
+      />
+      <Input
+        label="Broadlink IP *"
+        value={form.broadlink_ip}
+        onChange={(e) => setForm({ ...form, broadlink_ip: e.target.value })}
+        placeholder="192.168.1.xxx"
+        className="font-mono"
+        required
+      />
+      <Select
+        label="Salle"
+        value={form.salle_code}
+        onChange={(e) => setForm({ ...form, salle_code: e.target.value })}
+      >
+        <option value="">(sans salle)</option>
+        {salles.map((s) => (
+          <option key={s.id} value={s.code}>
+            {s.code} — {s.name}
+          </option>
+        ))}
+      </Select>
+      <Input
+        label="Taille TV (pouces)"
+        type="number"
+        value={form.tv_size_inches}
+        onChange={(e) => setForm({ ...form, tv_size_inches: e.target.value })}
+        placeholder="55"
+        className="font-mono"
+      />
+      <Input
+        label="Console"
+        value={form.console_model}
+        onChange={(e) => setForm({ ...form, console_model: e.target.value })}
+        placeholder="PS5, Xbox Series X…"
+      />
+      <Input
+        label="Casque VR"
+        value={form.vr_headset_model}
+        onChange={(e) => setForm({ ...form, vr_headset_model: e.target.value })}
+        placeholder="Meta Quest 3…"
+      />
+      <Input
+        label="Nb. manettes"
+        type="number"
+        value={form.controller_count}
+        onChange={(e) => setForm({ ...form, controller_count: e.target.value })}
+        placeholder="2"
+        className="font-mono"
+      />
+      <div className="sm:col-span-2">
+        <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-cp-muted">
+          Jeux / notes
+        </p>
+        <textarea
+          value={form.bundled_games}
+          onChange={(e) => setForm({ ...form, bundled_games: e.target.value })}
+          rows={2}
+          placeholder="FIFA 25, Hogwarts Legacy…"
+          className="w-full rounded-xl border border-cp-border bg-cp-bg/60 px-3 py-2.5 text-sm text-cp-text placeholder:text-cp-muted/60 transition focus:border-cp-cyan/50 focus:outline-none resize-none"
+        />
+      </div>
+      <label className="flex items-center gap-3 cursor-pointer sm:col-span-2">
+        <div className="relative">
+          <input
+            type="checkbox"
+            checked={form.is_active}
+            onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+            className="sr-only"
+          />
+          <div className={`h-5 w-9 rounded-full transition ${form.is_active ? 'bg-cp-cyan' : 'bg-white/10'}`}>
+            <div className={`h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform ${form.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          </div>
+        </div>
+        <span className="text-sm text-cp-muted">Station active</span>
+      </label>
+    </div>
+  )
 
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[1280px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-cp-muted">
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Nom</th>
-                  <th className="px-4 py-3">Salle</th>
-                  <th className="px-4 py-3">Broadlink</th>
-                  <th className="px-4 py-3">TV</th>
-                  <th className="px-4 py-3">Console</th>
-                  <th className="px-4 py-3">VR</th>
-                  <th className="px-4 py-3">Man.</th>
-                  <th className="px-4 py-3">Jeux / notes</th>
-                  <th className="px-4 py-3">Actif</th>
-                  <th className="px-4 py-3">Public</th>
-                  <th className="px-4 py-3">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-white/5 hover:bg-white/[0.03]"
-                  >
-                    <td className="px-4 py-3">
-                      <Badge tone={r.usage_kind === 'rental' ? 'default' : 'muted'}>
-                        {r.usage_kind === 'rental'
-                          ? 'Location (hérité)'
-                          : 'Salle de jeu'}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.code ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: { ...s[r.id], code: e.target.value },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 font-mono text-xs text-cp-accent"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.name ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: { ...s[r.id], name: e.target.value },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={editForm[r.id]?.salle_code ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: { ...s[r.id], salle_code: e.target.value },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
-                      >
-                        <option value="">(sans salle)</option>
-                        {salles.map((s) => (
-                          <option key={s.id} value={s.code}>
-                            {s.code}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.broadlink_ip ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: {
-                              ...s[r.id],
-                              broadlink_ip: e.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 font-mono text-xs text-cp-muted"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.tv_size_inches ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: { ...s[r.id], tv_size_inches: e.target.value },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 font-mono text-xs"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.console_model ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: {
-                              ...s[r.id],
-                              console_model: e.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.vr_headset_model ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: {
-                              ...s[r.id],
-                              vr_headset_model: e.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={editForm[r.id]?.controller_count ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: { ...s[r.id], controller_count: e.target.value },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
-                      />
-                    </td>
-                    <td className="max-w-[200px] px-4 py-3">
-                      <textarea
-                        value={editForm[r.id]?.bundled_games ?? ''}
-                        onChange={(e) =>
-                          setEditForm((s) => ({
-                            ...s,
-                            [r.id]: { ...s[r.id], bundled_games: e.target.value },
-                          }))
-                        }
-                        rows={2}
-                        className="w-full rounded-lg border border-cp-border bg-cp-bg/60 px-2 py-1.5 text-xs"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={r.is_active ? 'ok' : 'muted'}>
-                        {r.is_active ? 'oui' : 'non'}
-                      </Badge>
-                      <div className="mt-2">
-                        <label className="flex items-center gap-2 text-xs text-cp-muted">
-                          <input
-                            type="checkbox"
-                            checked={editForm[r.id]?.is_active ?? false}
-                            onChange={(e) =>
-                              setEditForm((s) => ({
-                                ...s,
-                                [r.id]: {
-                                  ...s[r.id],
-                                  is_active: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          Actif
-                        </label>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {r.usage_kind === 'rental' ? (
-                        <span className="text-xs text-cp-muted">—</span>
-                      ) : (
-                        <a
-                          className="text-cp-teal hover:underline"
-                          href={`/s/${encodeURIComponent(r.code)}`}
-                        >
-                          /s/{r.code}
-                        </a>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {r.usage_kind === 'game_room' ? (
-                          <a
-                            className="text-cp-teal hover:underline"
-                            href={`/admin/stations/${r.id}/offers`}
-                          >
-                            Offres
-                          </a>
-                        ) : null}
-                        <form onSubmit={(e) => updateStation(e, r.id)}>
-                          <Button
-                            type="submit"
-                            variant="secondary"
-                            disabled={saving === r.id}
-                          >
-                            {saving === r.id ? '...' : 'Enregistrer'}
-                          </Button>
-                        </form>
-                      </div>
-                    </td>
+  return (
+    <div className="animate-fadeIn">
+      {/* Header */}
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Stations</h1>
+          <p className="mt-1 text-sm text-cp-muted">
+            Postes « salle de jeu » — pilotage Broadlink, QR code et sessions.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => reload(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-cp-muted transition hover:bg-white/10 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <Button onClick={() => { setNewForm(emptyForm()); setCreateOpen(true) }}>
+            <Plus className="h-4 w-4 mr-1" />
+            Nouvelle station
+          </Button>
+        </div>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <SkeletonTable rows={6} cols={6} />
+      ) : (
+        <div className="glass-panel overflow-hidden rounded-2xl border border-white/5">
+          {!rows || rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cp-accent/20 to-cp-vr/20">
+                <QrCode className="h-7 w-7 text-cp-muted" />
+              </div>
+              <p className="font-semibold text-cp-text">Aucune station</p>
+              <p className="mt-2 max-w-xs text-sm text-cp-muted">
+                Créez votre première station pour commencer à gérer les sessions.
+              </p>
+              <Button className="mt-5" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Créer une station
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/5 text-xs uppercase tracking-wider text-cp-muted">
+                    <th className="px-5 py-3">Code</th>
+                    <th className="px-5 py-3">Nom</th>
+                    <th className="px-5 py-3">Salle</th>
+                    <th className="px-5 py-3">Matériel</th>
+                    <th className="px-5 py-3">Statut</th>
+                    <th className="px-5 py-3">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        </>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr
+                      key={r.id}
+                      className="border-b border-white/5 transition hover:bg-white/[0.03] animate-fadeIn"
+                      style={{ animationDelay: `${i * 0.025}s` }}
+                    >
+                      <td className="px-5 py-3.5">
+                        <p className="font-mono text-sm font-semibold text-cp-accent">{r.code}</p>
+                        {r.broadlink_ip && (
+                          <p className="mt-0.5 font-mono text-xs text-cp-muted">{r.broadlink_ip}</p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="font-medium">{r.name}</p>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-cp-muted">
+                        {r.salle_code || '—'}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col gap-0.5 text-xs text-cp-muted">
+                          {r.console_model && <span>{r.console_model}</span>}
+                          {r.tv_size_inches && <span>TV {r.tv_size_inches}"</span>}
+                          {r.vr_headset_model && <span>VR: {r.vr_headset_model}</span>}
+                          {r.controller_count && <span>{r.controller_count} manette(s)</span>}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge tone={r.is_active ? 'ok' : 'muted'}>
+                          {r.is_active ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openEdit(r)}
+                            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-cp-muted transition hover:bg-white/10 hover:text-cp-text"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Modifier
+                          </button>
+                          {r.usage_kind === 'game_room' && (
+                            <>
+                              <Link
+                                to={`/admin/stations/${r.id}/offers`}
+                                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-cp-muted transition hover:bg-white/10 hover:text-cp-cyan"
+                              >
+                                Offres
+                              </Link>
+                              <a
+                                href={`/s/${encodeURIComponent(r.code)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-cp-cyan hover:underline"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
-    </>
+
+      {/* Create Modal */}
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Créer une station"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleCreate} disabled={saving}>
+              {saving ? 'Création…' : 'Créer la station'}
+            </Button>
+          </>
+        }
+      >
+        <StationForm form={newForm} setForm={setNewForm} />
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        open={!!editRow}
+        onClose={() => setEditRow(null)}
+        title={`Modifier : ${editRow?.name ?? ''}`}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditRow(null)}>
+              Annuler
+            </Button>
+            <Button onClick={handleUpdate} disabled={saving}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </>
+        }
+      >
+        <StationForm form={editForm} setForm={setEditForm} />
+      </Modal>
+    </div>
   )
 }

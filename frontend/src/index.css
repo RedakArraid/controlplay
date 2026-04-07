@@ -18,7 +18,7 @@
   --color-cp-vr: oklch(0.7 0.2 260);
   --color-cp-danger: oklch(0.63 0.22 25);
 
-  /* compat anciennes classes */
+  /* compat */
   --color-cp-accent2: oklch(0.82 0.16 75);
   --color-cp-teal: oklch(0.78 0.14 195);
 }
@@ -26,6 +26,8 @@
 :root {
   color-scheme: dark;
 }
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
 
 body {
   font-family: var(--font-sans);
@@ -35,12 +37,14 @@ body {
     radial-gradient(ellipse 50% 40% at 0% 80%, oklch(0.22 0.1 195 / 0.2), transparent 50%),
     linear-gradient(180deg, var(--color-cp-bg) 0%, oklch(0.08 0.02 280) 100%);
   color: var(--color-cp-text);
+  -webkit-font-smoothing: antialiased;
 }
 
 .font-display {
   font-family: var(--font-display);
 }
 
+/* ── Zone tokens ── */
 [data-zone='super'] {
   --cp-zone-accent: oklch(0.72 0.18 250);
   --cp-zone-glow: oklch(0.5 0.14 250 / 0.28);
@@ -51,6 +55,7 @@ body {
   --cp-zone-glow: oklch(0.52 0.12 75 / 0.22);
 }
 
+/* ── Glass panel ── */
 .glass-panel {
   background: linear-gradient(
     145deg,
@@ -64,6 +69,7 @@ body {
     inset 0 1px 0 oklch(1 0 0 / 0.04);
 }
 
+/* ── Grid background ── */
 .grid-bg {
   background-image:
     linear-gradient(oklch(0.45 0.05 280 / 0.06) 1px, transparent 1px),
@@ -71,12 +77,14 @@ body {
   background-size: 56px 56px;
 }
 
+/* ── Noise overlay ── */
 .noise-overlay {
   pointer-events: none;
   opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* ── Hero glow ── */
 .hero-glow {
   background: radial-gradient(
     circle at 50% 0%,
@@ -85,9 +93,117 @@ body {
   );
 }
 
+/* ── Brand gradient text ── */
 .text-gradient-brand {
   background: linear-gradient(105deg, oklch(0.85 0.12 195), oklch(0.78 0.22 310), oklch(0.88 0.15 75));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
+
+/* ── Animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn        { animation: fadeIn 0.35s ease both; }
+.animate-fadeInScale   { animation: fadeInScale 0.3s ease both; }
+.animate-slideInRight  { animation: slideInRight 0.3s ease both; }
+.animate-pulseGlow     { animation: pulseGlow 2s ease-in-out infinite; }
+.animate-countUp       { animation: countUp 0.5s ease both; }
+
+/* Toast enter */
+.toast-enter { animation: slideInRight 0.3s ease both; }
+/* Modal enter */
+.modal-enter { animation: fadeInScale 0.25s ease both; }
+
+/* ── Skeleton shimmer ── */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.22 0.04 280 / 0.6) 25%,
+    oklch(0.28 0.05 280 / 0.8) 50%,
+    oklch(0.22 0.04 280 / 0.6) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Stagger animation utilities ── */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+
+/* ── Custom scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(0.35 0.04 280); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(0.45 0.06 280); }
+
+/* ── Focus ring ── */
+:focus-visible {
+  outline: 2px solid oklch(0.72 0.14 195 / 0.7);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Selection ── */
+::selection {
+  background: oklch(0.72 0.22 310 / 0.3);
+  color: var(--color-cp-text);
+}
+
+/* ── KPI card glow on hover ── */
+.kpi-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 32px oklch(0 0 0 / 0.5),
+    0 0 0 1px oklch(0.4 0.06 280 / 0.4);
+}
+
+/* ── Station status indicator ── */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.status-dot.active {
+  background: oklch(0.65 0.19 160);
+  box-shadow: 0 0 0 3px oklch(0.65 0.19 160 / 0.25);
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+.status-dot.paused  { background: oklch(0.75 0.15 75); }
+.status-dot.pending { background: oklch(0.65 0.03 260); }
+.status-dot.idle    { background: oklch(0.5 0.03 260); }
