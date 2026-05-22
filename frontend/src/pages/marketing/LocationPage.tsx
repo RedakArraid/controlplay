@@ -135,12 +135,12 @@ export function LocationPage() {
         <p className="mt-2 max-w-xl text-sm text-cp-muted">
           Tarifs et durées des forfaits « location console » — paiement en ligne selon la configuration PSP.
         </p>
-        <a
-          href="/rental"
+        <Link
+          to="/location/reserver"
           className="mt-4 inline-flex items-center gap-2 rounded-xl bg-cp-accent px-4 py-2.5 text-sm font-semibold text-cp-bg shadow-lg shadow-cp-accent/20 transition hover:opacity-90"
         >
-          Voir les forfaits & payer
-        </a>
+          Réserver un forfait (interface adaptée)
+        </Link>
       </Card>
 
       {err ? <p className="mt-6 text-rose-300">{err}</p> : null}
@@ -157,7 +157,8 @@ export function LocationPage() {
         <p className="mt-8 text-cp-muted">Chargement…</p>
       ) : rentalConsoles.length === 0 ? (
         <p className="mt-8 text-cp-muted">
-          Aucun poste location publié pour le moment (admin : stations, type « location ControlPlay »).
+          Aucun poste location publié pour le moment (admin plateforme :{' '}
+          <strong className="text-cp-text">Consoles location</strong>).
         </p>
       ) : (
         <>

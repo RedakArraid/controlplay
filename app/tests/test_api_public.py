@@ -60,3 +60,21 @@ def test_public_stations_returns_shape(client: TestClient) -> None:
         assert "vr_headset_model" in s
         assert "games" in s
         assert isinstance(s["games"], list)
+
+
+def test_public_shop_products_returns_shape(client: TestClient) -> None:
+    r = client.get("/api/public/shop-products")
+    assert r.status_code == 200
+    data = r.json()
+    assert "products" in data
+    assert isinstance(data["products"], list)
+
+
+def test_public_rental_catalog_returns_shape(client: TestClient) -> None:
+    r = client.get("/api/public/rental-catalog")
+    assert r.status_code == 200
+    data = r.json()
+    assert "plans" in data and "consoles" in data
+    assert isinstance(data["plans"], list)
+    assert isinstance(data["consoles"], list)
+

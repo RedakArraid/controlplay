@@ -254,6 +254,7 @@ def api_admin_bootstrap(request: Request, db: Session = Depends(get_db)):
                 {"label": "Forfaits location", "to": "/admin/rental-plans"},
                 {"label": "Consoles location", "to": "/admin/rental-consoles"},
                 {"label": "Jeux location", "to": "/admin/rental-games"},
+                {"label": "Produits boutique", "to": "/admin/boutique-produits"},
             ]
         if m.can_use_mes_utilisateurs_page(db, uid):
             items.insert(2, {"label": "Mes utilisateurs", "to": "/admin/mes-utilisateurs"})

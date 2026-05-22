@@ -5,6 +5,8 @@ import { SuperAdminLayout } from './layouts/SuperAdminLayout'
 import { HomePage } from './pages/marketing/HomePage'
 import { LocationPage } from './pages/marketing/LocationPage'
 import { BoutiquePage } from './pages/marketing/BoutiquePage'
+import { BoutiqueCheckoutPage } from './pages/marketing/BoutiqueCheckoutPage'
+import { LocationReservationPage } from './pages/marketing/LocationReservationPage'
 import { CartePage } from './pages/marketing/CartePage'
 import { JeuxPage } from './pages/marketing/JeuxPage'
 import { StationCheckoutPage } from './pages/marketing/StationCheckoutPage'
@@ -21,6 +23,7 @@ import { FeedbackAdminPage } from './pages/admin/FeedbackAdminPage'
 import { RentalPlans } from './pages/admin/RentalPlans'
 import { RentalConsoles } from './pages/admin/RentalConsoles'
 import { RentalGames } from './pages/admin/RentalGames'
+import { BoutiqueProduits } from './pages/admin/BoutiqueProduits'
 import { SuperHome } from './pages/super/SuperHome'
 import { SuperUsers } from './pages/super/SuperUsers'
 import { SuperUserRoles } from './pages/super/SuperUserRoles'
@@ -36,7 +39,9 @@ export default function App() {
         <Route path="/" element={<MarketingLayout />}>
           <Route index element={<HomePage />} />
           <Route path="location" element={<LocationPage />} />
+          <Route path="location/reserver" element={<LocationReservationPage />} />
           <Route path="boutique" element={<BoutiquePage />} />
+          <Route path="boutique/commande" element={<BoutiqueCheckoutPage />} />
           <Route path="carte" element={<CartePage />} />
           <Route path="jeux" element={<JeuxPage />} />
           <Route path="s/:stationCode" element={<StationCheckoutPage />} />
@@ -56,6 +61,7 @@ export default function App() {
           <Route path="rental-plans" element={<RentalPlans />} />
           <Route path="rental-consoles" element={<RentalConsoles />} />
           <Route path="rental-games" element={<RentalGames />} />
+          <Route path="boutique-produits" element={<BoutiqueProduits />} />
           <Route path="sessions" element={<Sessions />} />
           <Route path="feedback" element={<FeedbackAdminPage />} />
           <Route path="mes-utilisateurs" element={<MesUtilisateurs />} />

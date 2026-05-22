@@ -1,0 +1,13 @@
+# Réduit fortement le contexte Docker (vite + COPY app/).
+.git
+**/.git
+**/node_modules
+frontend/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/coverage
+**/dist
+**/.vscode
+.env.local
+*.log

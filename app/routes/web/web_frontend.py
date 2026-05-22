@@ -9,6 +9,7 @@ from dependencies import *
 from payment_utils import *
 import html as html_lib
 import collections
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter()
 
@@ -439,6 +440,128 @@ def rental_checkout(
     order = RentalOrder(
         rental_plan_id=plan.id,
         rental_console_id=console.id,
+        user_id=user.id,
+        payment_provider=chosen_sim_provider,
+        payment_reference=reference,
+        payment_status="pending",
+        status="pending",
+        customer_email=customer_email,
+        customer_phone=customer_phone,
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    email_query = customer_email or ""
+    return RedirectResponse(
+        url=f"/simulate/pay/{reference}?status=success&email={email_query}",
+        status_code=303,
+    )
+
+@router.post("/shop/checkout")
+def shop_checkout(
+    shop_product_id: int = Form(...),
+    connect: str = Form("0"),
+    email: str = Form(""),
+    phone: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    prod = (
+        db.query(ShopProduct)
+        .filter(ShopProduct.id == shop_product_id, ShopProduct.is_active.is_(True))
+        .first()
+    )
+    if not prod:
+        raise HTTPException(status_code=404, detail="Produit introuvable")
+
+    if connect == "1":
+        if not phone or not phone.strip():
+            raise HTTPException(status_code=400, detail="Numéro de téléphone requis (connexion)")
+        customer_phone = phone.strip()
+        customer_email = (email or "").strip() or None
+        user = get_or_create_user_by_phone(db, customer_phone, customer_email)
+    else:
+        user = get_default_user(db)
+        customer_phone = None
+        customer_email = None
+
+    if not (is_paystack_configured() or is_cinetpay_configured()):
+        chosen_sim_provider = "paystack" if paystack_enabled() else "cinetpay"
+        reference = make_payment_reference(chosen_sim_provider)
+        order = ShopOrder(
+            shop_product_id=prod.id,
+            user_id=user.id,
+            payment_provider=chosen_sim_provider,
+            payment_reference=reference,
+            payment_status="pending",
+            status="pending",
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        log_event(db, f"Boutique checkout (simulation) {reference} ({chosen_sim_provider})")
+        email_query = customer_email or ""
+        return RedirectResponse(
+            url=f"/simulate/pay/{reference}?status=success&email={email_query}",
+            status_code=303,
+        )
+
+    if is_paystack_configured():
+        paystack_email = get_paystack_email(customer_email, customer_phone)
+        reference = make_payment_reference("paystack")
+        try:
+            authorization_url = init_paystack_payment(
+                reference,
+                email=paystack_email,
+                amount_xof=prod.price_xof,
+                callback_url=f"{get_base_url()}/payments/return/paystack/{reference}",
+            )
+            order = ShopOrder(
+                shop_product_id=prod.id,
+                user_id=user.id,
+                payment_provider="paystack",
+                payment_reference=reference,
+                payment_status="pending",
+                status="pending",
+                customer_email=customer_email,
+                customer_phone=customer_phone,
+            )
+            db.add(order)
+            db.commit()
+            db.refresh(order)
+            log_event(db, f"Boutique Paystack init {reference}")
+            return RedirectResponse(url=authorization_url, status_code=303)
+        except Exception as e:
+            log_event(db, f"Boutique Paystack init echoue: {e}", level="warning")
+
+    if is_cinetpay_configured():
+        reference = make_payment_reference("cinetpay")
+        payment_url = init_cinetpay_payment(
+            transaction_id=reference,
+            amount_xof=prod.price_xof,
+            description=prod.name,
+        )
+        order = ShopOrder(
+            shop_product_id=prod.id,
+            user_id=user.id,
+            payment_provider="cinetpay",
+            payment_reference=reference,
+            payment_status="pending",
+            status="pending",
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        log_event(db, f"Boutique CinetPay init {reference}")
+        return RedirectResponse(url=payment_url, status_code=303)
+
+    chosen_sim_provider = "paystack" if paystack_enabled() else "cinetpay"
+    reference = make_payment_reference(chosen_sim_provider)
+    order = ShopOrder(
+        shop_product_id=prod.id,
         user_id=user.id,
         payment_provider=chosen_sim_provider,
         payment_reference=reference,

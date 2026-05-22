@@ -42,7 +42,9 @@ export function SuperAdminLayout() {
     return () => {
       cancelled = true
     }
-  }, [loc.pathname])
+    // Intentionnellement sans dépendance à loc : même logique que AdminLayout (pas de reload à chaque route).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (me === undefined && !err) {
     return (

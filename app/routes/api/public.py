@@ -29,6 +29,7 @@ from models import (
     Role,
     SalleOffer,
     SalleUser,
+    ShopProduct,
     Station,
     StationOffer,
     User,
@@ -236,6 +237,62 @@ def api_public_salles(db: Session = Depends(get_db)):
             for s in salles
         ]
     }
+
+@router.get("/public/shop-products")
+def api_public_shop_products(db: Session = Depends(get_db)):
+    products = (
+        db.query(ShopProduct)
+        .filter(ShopProduct.is_active.is_(True))
+        .order_by(ShopProduct.sort_order.asc(), ShopProduct.id.asc())
+        .all()
+    )
+    return {
+        "products": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "price_xof": p.price_xof,
+                "provider": p.provider,
+            }
+            for p in products
+        ]
+    }
+
+
+@router.get("/public/rental-catalog")
+def api_public_rental_catalog(db: Session = Depends(get_db)):
+    """Forfaits + consoles disponibles pour le tunnel location (SPA)."""
+    plans = (
+        db.query(RentalPlan)
+        .filter(RentalPlan.is_active.is_(True))
+        .order_by(RentalPlan.price_xof.asc(), RentalPlan.id.asc())
+        .all()
+    )
+    consoles = (
+        db.query(RentalConsole)
+        .filter(RentalConsole.is_active.is_(True))
+        .order_by(RentalConsole.code.asc())
+        .all()
+    )
+    return {
+        "plans": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "duration_label": p.duration_label,
+                "price_xof": p.price_xof,
+                "provider": p.provider,
+                "rental_console_id": p.rental_console_id,
+            }
+            for p in plans
+        ],
+        "consoles": [
+            {"id": c.id, "code": c.code, "name": c.name} for c in consoles
+        ],
+    }
+
 
 @router.get("/public/jeux")
 def api_public_jeux(db: Session = Depends(get_db)):

@@ -213,10 +213,12 @@ def test_apply_paid_extension_idempotent(db_session, monkeypatch):
 
 
 def test_checkout_guest_allows_no_email_no_phone(db_session, monkeypatch):
-    # On force la simulation (pas de provider externe)
-    monkeypatch.setattr(main_module, "is_paystack_configured", lambda: False)
-    monkeypatch.setattr(main_module, "is_cinetpay_configured", lambda: False)
-    monkeypatch.setattr(main_module, "paystack_enabled", lambda: False)
+    # On force la simulation (pas de provider externe) — patcher le module qui lie les symboles au chargement
+    import routes.web.web_payments as wp
+
+    monkeypatch.setattr(wp, "is_paystack_configured", lambda: False)
+    monkeypatch.setattr(wp, "is_cinetpay_configured", lambda: False)
+    monkeypatch.setattr(wp, "paystack_enabled", lambda: False)
 
     Station = models_module.Station
     Offer = models_module.Offer

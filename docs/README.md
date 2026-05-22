@@ -36,7 +36,8 @@ Le système bascule ensuite la TV sur l'entrée HDMI de la console pendant la du
    - `connexion` optionnelle : si cochée, `phone` est obligatoire et `email` reste optionnel
    - si non cochée (mode invité), `email` et `phone` peuvent être vides (associé à `default_user`)
 3. Le backend crée une session de jeu et redirige vers le paiement :
-   - L'admin peut désactiver Paystack via `/admin/providers` pour basculer vers CinetPay (si disponible).
+   - Les clés PSP se configurent dans **`.env`** ; le détail des variables et URLs webhooks est dans **`docs/PSP_PAYSTACK_CINETPAY.md`**.
+   - Le super-admin peut activer ou désactiver chaque PSP (sans retirer les clés) via **`/super-admin/providers`** (formulaire posté vers `/admin/providers`).
    - Pour supervision, un récapitulatif est disponible via `/admin/dashboard`.
    - **MVP/dev**: simulation (si les clés PSP ne sont pas configurées)
    - **production**: initialisation Paystack, fallback CinetPay si nécessaire

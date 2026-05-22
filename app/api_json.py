@@ -8,6 +8,7 @@ from routes.api.admin_offers import router as admin_offers_router
 from routes.api.super_admin import router as super_admin_router
 from routes.api.public import router as public_router
 from routes.api.leftovers import router as leftovers_router
+from routes.api.admin_shop import router as admin_shop_router
 
 router = APIRouter(tags=["api"])
 
@@ -16,6 +17,7 @@ router.include_router(admin_salles_router)
 router.include_router(admin_stations_router)
 router.include_router(admin_users_router)
 router.include_router(admin_offers_router)
+router.include_router(admin_shop_router)
 router.include_router(super_admin_router)
 router.include_router(public_router)
 router.include_router(leftovers_router)

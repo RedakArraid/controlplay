@@ -336,6 +336,40 @@ class RentalConsoleGame(Base):
     game = relationship("RentalGame", back_populates="console_links")
 
 
+class ShopProduct(Base):
+    """Article boutique (physique ou démat) — tunnel paiement indépendant des offres temps de jeu."""
+
+    __tablename__ = "shop_products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price_xof: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="paystack")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    orders = relationship("ShopOrder", back_populates="product")
+
+
+class ShopOrder(Base):
+    __tablename__ = "shop_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    shop_product_id: Mapped[int] = mapped_column(ForeignKey("shop_products.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    payment_provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    payment_reference: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    payment_status: Mapped[str] = mapped_column(String(32), default="pending")
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    customer_email: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    customer_phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    product = relationship("ShopProduct", back_populates="orders")
+    user = relationship("User")
+
+
 class FeedbackEntry(Base):
     __tablename__ = "feedback_entries"
 

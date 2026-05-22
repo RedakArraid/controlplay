@@ -1,3 +1,4 @@
+"""Envoi IR Broadlink. Defaut: dry-run (voir BROADLINK_DRY_RUN) tant que la partie matériel TV n'est pas prioritaire."""
 import os
 from typing import Optional
 

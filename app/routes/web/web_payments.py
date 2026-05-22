@@ -33,6 +33,12 @@ def _activate_paid_rental(db, rental, source: str, trusted: bool = False):
     return m.activate_paid_rental(db, rental, source, trusted=trusted)
 
 
+def _activate_paid_shop(db, order, source: str, trusted: bool = False):
+    import main as m
+
+    return m.activate_paid_shop(db, order, source, trusted=trusted)
+
+
 def _apply_paid_extension(db, extension, source: str, trusted: bool = False):
     import main as m
 
@@ -339,7 +345,7 @@ def simulate_payment(reference: str, status: str, email: str = "", db: Session =
                 "Location",
                 "<h1>Paiement location refuse</h1>"
                 "<p><a href='/rental'>Nouvelle tentative</a></p>"
-                "<p><a href='/location'>Vitrine location</a></p>",
+                "<p><a href='/location/reserver'>Réservation (interface adaptée)</a></p>",
             )
         if rental_order.payment_status == "paid" and rental_order.status == "paid":
             return RedirectResponse(url="/location", status_code=303)
@@ -355,6 +361,33 @@ def simulate_payment(reference: str, status: str, email: str = "", db: Session =
                 "<p><a href='/rental'>Retour location</a></p>",
             )
         return RedirectResponse(url="/location", status_code=303)
+
+    shop_order = db.query(ShopOrder).filter(ShopOrder.payment_reference == reference).first()
+    if shop_order:
+        if status != "success":
+            if shop_order.payment_status != "paid":
+                shop_order.payment_status = "failed"
+                shop_order.status = "failed"
+                db.commit()
+            return _pub(
+                "Boutique",
+                "<h1>Paiement boutique refuse</h1>"
+                "<p><a href='/boutique/commande'>Nouvelle tentative</a></p>"
+                "<p><a href='/boutique'>Accueil boutique</a></p>",
+            )
+        if shop_order.payment_status == "paid" and shop_order.status == "paid":
+            return RedirectResponse(url="/boutique?commande=ok", status_code=303)
+        activated = _activate_paid_shop(db, shop_order, "simulate", trusted=True)
+        if not activated:
+            db.refresh(shop_order)
+            if shop_order.payment_status == "paid":
+                return RedirectResponse(url="/boutique?commande=ok", status_code=303)
+            return _pub(
+                "Boutique",
+                "<h1>Commande non validee</h1>"
+                "<p><a href='/boutique/commande'>Retour boutique</a></p>",
+            )
+        return RedirectResponse(url="/boutique?commande=ok", status_code=303)
 
     session = db.query(GameSession).filter(GameSession.payment_reference == reference).first()
     if not session:
@@ -449,6 +482,28 @@ def paystack_return(reference: str, request: Request, db: Session = Depends(get_
             "<h1>Paiement location en attente</h1>"
             "<p>La confirmation peut arriver par notification (webhook).</p>"
             "<p><a href='/location'>Vitrine location</a></p>",
+        )
+
+    shop_ord = db.query(ShopOrder).filter(ShopOrder.payment_reference == reference).first()
+    if shop_ord:
+        if shop_ord.payment_status == "paid":
+            return RedirectResponse(url="/boutique?commande=ok", status_code=303)
+        if (
+            shop_ord.payment_provider == "paystack"
+            and is_paystack_api_configured()
+            and shop_ord.status == "pending"
+            and shop_ord.payment_status != "paid"
+        ):
+            if verify_paystack_transaction(reference):
+                _activate_paid_shop(db, shop_ord, "paystack_return", trusted=False)
+                db.refresh(shop_ord)
+        if shop_ord.payment_status == "paid":
+            return RedirectResponse(url="/boutique?commande=ok", status_code=303)
+        return _pub(
+            "Boutique",
+            "<h1>Paiement boutique en attente</h1>"
+            "<p>La confirmation peut arriver par notification (webhook).</p>"
+            "<p><a href='/boutique'>Boutique</a></p>",
         )
 
     session = db.query(GameSession).filter(GameSession.payment_reference == reference).first()
@@ -555,6 +610,17 @@ async def cinetpay_return(request: Request, db: Session = Depends(get_db)):
             "<p><a href='/location'>Vitrine location</a></p>",
         )
 
+    shop_o = db.query(ShopOrder).filter(ShopOrder.payment_reference == transaction_id).first()
+    if shop_o:
+        if shop_o.payment_status == "paid":
+            return RedirectResponse(url="/boutique?commande=ok", status_code=303)
+        return _pub(
+            "Boutique",
+            "<h1>Paiement boutique en attente</h1>"
+            "<p>Merci de patienter (validation via webhook CinetPay).</p>"
+            "<p><a href='/boutique'>Boutique</a></p>",
+        )
+
     session = db.query(GameSession).filter(GameSession.payment_reference == transaction_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Reference introuvable")
@@ -593,8 +659,10 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
         return {"ok": True}
     session = db.query(GameSession).filter(GameSession.payment_reference == reference).first()
     extension = db.query(SessionExtension).filter(SessionExtension.payment_reference == reference).first()
+    rental_w = db.query(RentalOrder).filter(RentalOrder.payment_reference == reference).first()
+    shop_w = db.query(ShopOrder).filter(ShopOrder.payment_reference == reference).first()
 
-    # En cas d'événement non-success, on libère la station.
+    # En cas d'événement non-success, on libère la station / commande.
     if event and event != "charge.success":
         if session and session.status == "pending":
             session.payment_status = "failed"
@@ -611,12 +679,34 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
             extension.payment_status = "failed"
             extension.status = "failed"
             db.commit()
+        if rental_w and rental_w.status == "pending":
+            rental_w.payment_status = "failed"
+            rental_w.status = "failed"
+            db.commit()
+            log_event(
+                db,
+                f"Paystack event {event}: location echouee pour {reference}",
+                level="warning",
+            )
+        if shop_w and shop_w.status == "pending":
+            shop_w.payment_status = "failed"
+            shop_w.status = "failed"
+            db.commit()
+            log_event(
+                db,
+                f"Paystack event {event}: boutique echouee pour {reference}",
+                level="warning",
+            )
         return {"ok": True}
 
     if session:
         _activate_paid_session(db, session, "paystack_webhook")
     elif extension:
         _apply_paid_extension(db, extension, "paystack_webhook")
+    elif rental_w:
+        _activate_paid_rental(db, rental_w, "paystack_webhook", trusted=False)
+    elif shop_w:
+        _activate_paid_shop(db, shop_w, "paystack_webhook", trusted=False)
     return {"ok": True}
 
 @router.post("/webhooks/cinetpay")
@@ -662,6 +752,7 @@ async def cinetpay_webhook(request: Request, db: Session = Depends(get_db)):
         return {"ok": True}
     session = db.query(GameSession).filter(GameSession.payment_reference == reference).first()
     rental_order = db.query(RentalOrder).filter(RentalOrder.payment_reference == reference).first()
+    shop_order = db.query(ShopOrder).filter(ShopOrder.payment_reference == reference).first()
 
     if payment_status and payment_status not in ("00", "accepted", "success"):
         if session and session.status == "pending":
@@ -684,10 +775,21 @@ async def cinetpay_webhook(request: Request, db: Session = Depends(get_db)):
                 f"CinetPay status {payment_status}: location echouee pour {reference}",
                 level="warning",
             )
+        if shop_order and shop_order.status == "pending":
+            shop_order.payment_status = "failed"
+            shop_order.status = "failed"
+            db.commit()
+            log_event(
+                db,
+                f"CinetPay status {payment_status}: boutique echouee pour {reference}",
+                level="warning",
+            )
         return {"ok": True}
 
     if session:
         _activate_paid_session(db, session, "cinetpay_webhook")
     elif rental_order:
         _activate_paid_rental(db, rental_order, "cinetpay_webhook", trusted=False)
+    elif shop_order:
+        _activate_paid_shop(db, shop_order, "cinetpay_webhook", trusted=False)
     return {"ok": True}
