@@ -10,11 +10,9 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
-from uuid import uuid4
 
 import bcrypt
 import qrcode
-import requests
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -36,6 +34,8 @@ from models import (
     Role,
     SalleUser,
     SessionExtension,
+    ShopOrder,
+    ShopProduct,
     Station,
     StationOffer,
     SalleOffer,
@@ -53,6 +53,7 @@ from ui_theme import (
     super_admin_nav_html,
 )
 from dependencies import find_user_for_login, get_role_ids, html_login_page, login_next_safe
+from payment_utils import cinetpay_enabled, paystack_enabled, verify_transaction
 
 _login_next_safe = login_next_safe
 _find_user_for_login = find_user_for_login
@@ -577,210 +578,6 @@ def get_allowed_offer_ids_for_user(db: Session, user_id: int) -> set[int]:
     return {r[0] for r in (offer_ids_station + offer_ids_salle)}
 
 
-def verify_paystack_transaction(reference: str) -> bool:
-    secret_key = os.getenv("PAYSTACK_SECRET_KEY", "")
-    if not secret_key or "xxx" in secret_key:
-        return False
-    try:
-        response = requests.get(
-            f"https://api.paystack.co/transaction/verify/{reference}",
-            headers={"Authorization": f"Bearer {secret_key}"},
-            timeout=10,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        data = payload.get("data", {})
-        return bool(payload.get("status")) and data.get("status") == "success"
-    except requests.RequestException:
-        return False
-
-
-def verify_cinetpay_transaction(reference: str) -> bool:
-    api_key = os.getenv("CINETPAY_API_KEY", "")
-    site_id = os.getenv("CINETPAY_SITE_ID", "")
-    if not api_key or not site_id or "xxx" in api_key:
-        return False
-    try:
-        response = requests.post(
-            "https://api-checkout.cinetpay.com/v2/payment/check",
-            json={"apikey": api_key, "site_id": site_id, "transaction_id": reference},
-            timeout=10,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        data = payload.get("data", {})
-        return str(data.get("status", "")).upper() == "ACCEPTED"
-    except requests.RequestException:
-        return False
-
-
-def verify_transaction(provider: str, reference: str) -> bool:
-    if provider == "paystack":
-        return verify_paystack_transaction(reference)
-    if provider == "cinetpay":
-        return verify_cinetpay_transaction(reference)
-    return False
-
-
-def get_payment_provider_config() -> PaymentProviderConfig | None:
-    """
-    Lit les flags d'activation des providers.
-    Utilisé par les helpers sans dépendance DB directe.
-    """
-    db = SessionLocal()
-    try:
-        return db.query(PaymentProviderConfig).order_by(PaymentProviderConfig.id.asc()).first()
-    finally:
-        db.close()
-
-
-def paystack_enabled() -> bool:
-    cfg = get_payment_provider_config()
-    return cfg.paystack_enabled if cfg else True
-
-
-def cinetpay_enabled() -> bool:
-    cfg = get_payment_provider_config()
-    return cfg.cinetpay_enabled if cfg else True
-
-
-def is_paystack_api_configured() -> bool:
-    """Clé secrète suffisante pour /transaction/initialize et /transaction/verify."""
-    if not paystack_enabled():
-        return False
-    secret = os.getenv("PAYSTACK_SECRET_KEY", "")
-    return bool(secret) and "xxx" not in secret.lower()
-
-
-def is_paystack_webhook_secret_configured() -> bool:
-    """Secret du dashboard Paystack pour valider x-paystack-signature (recommandé en prod)."""
-    if not paystack_enabled():
-        return False
-    wh = os.getenv("PAYSTACK_WEBHOOK_SECRET", "")
-    return bool(wh) and "xxx" not in wh.lower()
-
-
-def is_paystack_configured() -> bool:
-    """Alias rétro-compat : paiement Paystack possible dès que la clé API est présente."""
-    return is_paystack_api_configured()
-
-
-def is_cinetpay_configured() -> bool:
-    api_key = os.getenv("CINETPAY_API_KEY", "")
-    site_id = os.getenv("CINETPAY_SITE_ID", "")
-    if not cinetpay_enabled():
-        return False
-    return bool(api_key) and bool(site_id) and "xxx" not in api_key and "xxx" not in site_id
-
-
-def is_cinetpay_webhook_secret_configured() -> bool:
-    """Secret (CINETPAY_SECRET_KEY) pour valider le header `x-token` du webhook."""
-    if not cinetpay_enabled():
-        return False
-    secret = os.getenv("CINETPAY_SECRET_KEY", "")
-    return bool(secret) and "xxx" not in secret.lower()
-
-
-def make_payment_reference(provider: str) -> str:
-    """
-    Référence utilisée pour retrouver la transaction dans les webhooks.
-    - Paystack: Paystack refuse certains caractères (ex: `_`), on utilise `ps-<hex>`.
-    - CinetPay: on évite `_` et autres caractères spéciaux, on utilise `cp<hex>`.
-    """
-    base = uuid4().hex[:18]
-    if provider == "cinetpay":
-        return f"cp{base}"
-    # Paystack refuse certains caractères (ex: `_`), on utilise donc un format
-    # alphanumérique avec tirets autorisés.
-    return f"ps-{base}"
-
-
-def get_base_url() -> str:
-    return os.getenv("BASE_URL", "http://localhost:8000")
-
-
-def paystack_amount_units(amount_main: int) -> int:
-    """
-    Montant envoyé à Paystack (integer).
-    - XOF / franc CFA : Paystack semble attendre des sous-unités (centimes), soit ×100.
-      Défaut multiplier = 100.
-    - NGN (kobo) : mettre PAYSTACK_AMOUNT_MULTIPLIER=100 dans l'env.
-    """
-    mult = int(os.getenv("PAYSTACK_AMOUNT_MULTIPLIER", "100"))
-    return int(amount_main) * mult
-
-
-def init_paystack_payment(reference: str, email: str | None, amount_xof: int, callback_url: str | None = None) -> str:
-    """
-    Initialise un paiement Paystack et renvoie l'URL d'autorisation.
-    """
-    if not is_paystack_api_configured():
-        raise RuntimeError("Paystack non configuré (PAYSTACK_SECRET_KEY)")
-    secret_key = os.getenv("PAYSTACK_SECRET_KEY", "")
-    if callback_url is None:
-        callback_url = f"{get_base_url()}/payments/return/paystack/{reference}"
-    currency = os.getenv("PAYSTACK_CURRENCY", "XOF")
-    payload = {
-        "amount": paystack_amount_units(amount_xof),
-        "reference": reference,
-        "currency": currency,
-        "callback_url": callback_url,
-    }
-    # Paystack exige un email pour l'initialisation : on l'alimente côté backend
-    # (UI peut rester optionnelle, on génère un placeholder si nécessaire).
-    if email:
-        payload["email"] = email
-    response = requests.post(
-        "https://api.paystack.co/transaction/initialize",
-        headers={"Authorization": f"Bearer {secret_key}"},
-        json=payload,
-        timeout=15,
-    )
-    response.raise_for_status()
-    data = response.json()
-    authorization_url = (data.get("data") or {}).get("authorization_url")
-    if not data.get("status") or not authorization_url:
-        raise RuntimeError(f"Paystack init invalide: {data}")
-    return authorization_url
-
-
-def init_cinetpay_payment(transaction_id: str, amount_xof: int, description: str) -> str:
-    """
-    Initialise un paiement CinetPay et renvoie l'URL de checkout.
-    """
-    if not is_cinetpay_configured():
-        raise RuntimeError("CinetPay non configuré")
-    api_key = os.getenv("CINETPAY_API_KEY", "")
-    site_id = os.getenv("CINETPAY_SITE_ID", "")
-    if amount_xof % 5 != 0:
-        raise RuntimeError("Le montant CinetPay doit être un multiple de 5")
-
-    notify_url = f"{get_base_url()}/webhooks/cinetpay"
-    return_url = f"{get_base_url()}/payments/return/cinetpay"
-    payload = {
-        "apikey": api_key,
-        "site_id": site_id,
-        "transaction_id": transaction_id,
-        "amount": int(amount_xof),
-        "currency": "XOF",
-        "description": description,
-        "notify_url": notify_url,
-        "return_url": return_url,
-        "channels": "ALL",
-    }
-    response = requests.post(
-        "https://api-checkout.cinetpay.com/v2/payment",
-        json=payload,
-        timeout=15,
-    )
-    response.raise_for_status()
-    data = response.json()
-    payment_url = (data.get("data") or {}).get("payment_url")
-    if not data.get("code") or not payment_url:
-        raise RuntimeError(f"CinetPay init invalide: {data}")
-    return payment_url
-
-
 def get_equivalent_offer(db: Session, station_id: int, base_offer: Offer, provider: str) -> Offer | None:
     """
     Trouve l'offre équivalente pour un fallback Paystack/CinetPay sur une station:
@@ -1010,6 +807,32 @@ def activate_paid_rental(
     return True
 
 
+def activate_paid_shop(
+    db: Session, order: ShopOrder, source: str, trusted: bool = False
+) -> bool:
+    """Marque une commande boutique comme payée (pas de livraison automatisée ici)."""
+    order_db = db.query(ShopOrder).filter(ShopOrder.id == order.id).first()
+    if not order_db or order_db.status != "pending" or order_db.payment_status == "paid":
+        return False
+    if not trusted and not verify_transaction(
+        order_db.payment_provider, order_db.payment_reference
+    ):
+        order_db.payment_status = "failed"
+        order_db.status = "failed"
+        db.commit()
+        log_event(
+            db,
+            f"Boutique: verification echouee ({source}) pour {order_db.payment_reference}",
+            level="warning",
+        )
+        return False
+    order_db.payment_status = "paid"
+    order_db.status = "paid"
+    db.commit()
+    log_event(db, f"Boutique payee ({source}) ref={order_db.payment_reference}")
+    return True
+
+
 def _should_auto_ensure_dev_admin() -> bool:
     """Synchronise le compte dev documenté au démarrage (Docker local, pytest)."""
     v = os.getenv("AUTO_ENSURE_DEV_ADMIN", "").strip().lower()
@@ -1149,11 +972,33 @@ def seed_default_data() -> None:
                 )
             )
 
+        if db.query(ShopProduct).count() == 0:
+            db.add(
+                ShopProduct(
+                    name="Manettes & accessoires (au comptoir)",
+                    description="Prix catalogue indicatif ; retrait ou mise de côté après commande.",
+                    price_xof=15000,
+                    provider="paystack",
+                    sort_order=10,
+                    is_active=True,
+                )
+            )
+            db.add(
+                ShopProduct(
+                    name="Carte prépayée temps de jeu — cadeau",
+                    description="Bon numérique valable comme crédit sur les salons partenaires (conditions en point de vente).",
+                    price_xof=5000,
+                    provider="paystack",
+                    sort_order=20,
+                    is_active=True,
+                )
+            )
+
         # --- Auth / RBAC seed (users/roles) ---
         # On seed des roles minimaux + un admin global de bootstrap.
         role_seed = [
             ("super_admin", "Super admin (global)"),
-            ("admin", "Équipe ControlPlay (délégation super_admin — hors client salle_admin)"),
+            ("admin", "Équipe ControlPlay (délégation super_admin)"),
             ("salle_admin", "Admin de salle (client, scopé)"),
             ("manager", "Gérant"),
             ("responsable", "Responsable"),
