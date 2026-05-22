@@ -21,6 +21,9 @@ services:
       - traefik.http.routers.controlplay.tls=true
       - traefik.http.routers.controlplay.tls.certresolver=mytlschallenge
       - traefik.http.services.controlplay.loadbalancer.server.port=8000
+    command: >
+      sh -c "alembic -c alembic.ini upgrade head &&
+      exec uvicorn main:app --host 0.0.0.0 --port 8000"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\" || exit 1"]
       interval: 30s
